@@ -801,6 +801,64 @@ export interface ModifyObjectResult {
   id?: string;
 }
 
+export interface SheetMetadata {
+  id: number;
+  name: string;
+  maxRows: number;
+  maxColumns: number;
+  frozenRows: number;
+  frozenColumns: number;
+}
+
+export interface WorkbookMetadata {
+  success: boolean;
+  fileName: string;
+  sheetsMetadata: SheetMetadata[];
+  totalSheets: number;
+}
+
+export async function getWorkbookMetadata(): Promise<WorkbookMetadata> {
+  return Excel.run(async (context) => {
+    const workbook = context.workbook;
+    workbook.load("name");
+    const sheets = workbook.worksheets;
+    sheets.load("items");
+    await context.sync();
+
+    const sheetData: {
+      sheet: Excel.Worksheet;
+      usedRange: Excel.Range;
+      freezeLocation: Excel.Range;
+    }[] = [];
+
+    for (const sheet of sheets.items) {
+      sheet.load("id,name");
+      const usedRange = sheet.getUsedRangeOrNullObject();
+      usedRange.load("rowCount,columnCount");
+      const freezeLocation = sheet.freezePanes.getLocationOrNullObject();
+      freezeLocation.load("rowCount,columnCount");
+      sheetData.push({ sheet, usedRange, freezeLocation });
+    }
+    await context.sync();
+
+    const sheetsMetadata: SheetMetadata[] = sheetData.map(({ sheet, usedRange, freezeLocation }) => ({
+      id: Number.parseInt(sheet.id.replace(/\D/g, ""), 10),
+      name: sheet.name,
+      maxRows: usedRange.isNullObject ? 0 : usedRange.rowCount,
+      maxColumns: usedRange.isNullObject ? 0 : usedRange.columnCount,
+      frozenRows: freezeLocation.isNullObject ? 0 : freezeLocation.rowCount,
+      frozenColumns: freezeLocation.isNullObject ? 0 : freezeLocation.columnCount,
+    }));
+
+    return {
+      success: true,
+      fileName: workbook.name || "Untitled",
+      sheetsMetadata,
+      totalSheets: sheets.items.length,
+    };
+  });
+}
+
 export async function modifyObject(params: {
   operation: "create" | "update" | "delete";
   sheetId: number;

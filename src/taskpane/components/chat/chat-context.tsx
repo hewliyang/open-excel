@@ -15,6 +15,7 @@ import {
 } from "@mariozechner/pi-ai";
 import type { ReactNode } from "react";
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
+import { getWorkbookMetadata } from "../../../lib/excel/api";
 import { EXCEL_TOOLS } from "../../../lib/tools";
 
 export type ToolCallStatus = "pending" | "running" | "complete" | "error";
@@ -455,7 +456,14 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       }));
 
       try {
-        await agent.prompt(content);
+        let promptContent = content;
+        try {
+          const metadata = await getWorkbookMetadata();
+          promptContent = `<wb_context>\n${JSON.stringify(metadata, null, 2)}\n</wb_context>\n\n${content}`;
+        } catch (err) {
+          console.error("[Chat] Failed to get workbook metadata:", err);
+        }
+        await agent.prompt(promptContent);
         console.log("[Chat] Full context:", agent.state.messages);
       } catch (err) {
         isStreamingRef.current = false;
