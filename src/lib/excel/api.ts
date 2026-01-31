@@ -840,6 +840,9 @@ export interface WorkbookMetadata {
   fileName: string;
   sheetsMetadata: SheetMetadata[];
   totalSheets: number;
+  activeSheetId: number;
+  activeSheetName: string;
+  selectedRange: string;
 }
 
 export async function getWorkbookMetadata(): Promise<WorkbookMetadata> {
@@ -848,6 +851,13 @@ export async function getWorkbookMetadata(): Promise<WorkbookMetadata> {
     workbook.load("name");
     const sheets = workbook.worksheets;
     sheets.load("items");
+
+    const activeSheet = sheets.getActiveWorksheet();
+    activeSheet.load("id,name");
+
+    const selectedRange = workbook.getSelectedRange();
+    selectedRange.load("address");
+
     await context.sync();
 
     const sheetData: {
@@ -875,11 +885,24 @@ export async function getWorkbookMetadata(): Promise<WorkbookMetadata> {
       frozenColumns: freezeLocation.isNullObject ? 0 : freezeLocation.columnCount,
     }));
 
+    const activeSheetId = Number.parseInt(activeSheet.id.replace(/\D/g, ""), 10);
+    const rangeAddress = selectedRange.address.includes("!")
+      ? selectedRange.address.split("!")[1]
+      : selectedRange.address;
+
+    console.log("[getWorkbookMetadata] activeSheet.id:", activeSheet.id);
+    console.log("[getWorkbookMetadata] activeSheet.name:", activeSheet.name);
+    console.log("[getWorkbookMetadata] selectedRange.address:", selectedRange.address);
+    console.log("[getWorkbookMetadata] parsed rangeAddress:", rangeAddress);
+
     return {
       success: true,
       fileName: workbook.name || "Untitled",
       sheetsMetadata,
       totalSheets: sheets.items.length,
+      activeSheetId,
+      activeSheetName: activeSheet.name,
+      selectedRange: rangeAddress,
     };
   });
 }

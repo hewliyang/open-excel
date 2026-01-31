@@ -462,7 +462,9 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       try {
         let promptContent = content;
         try {
+          console.log("[Chat] Fetching workbook metadata...");
           const metadata = await getWorkbookMetadata();
+          console.log("[Chat] Workbook metadata:", metadata);
           promptContent = `<wb_context>\n${JSON.stringify(metadata, null, 2)}\n</wb_context>\n\n${content}`;
         } catch (err) {
           console.error("[Chat] Failed to get workbook metadata:", err);

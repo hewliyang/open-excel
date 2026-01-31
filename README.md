@@ -65,6 +65,12 @@ npm run stop
 | `resize_range` | Adjust column widths and row heights |
 | `modify_object` | Create/update/delete charts and pivot tables |
 
+### Original Tools (1)
+
+| Tool | Description |
+|------|-------------|
+| `eval_officejs` | Execute arbitrary Office.js code within Excel.run context (escape hatch) |
+
 ### Non-Spreadsheet Tools (4)
 
 These are not implemented for obvious reasons. I guess we can do it as BYOK w/ some sandbox & search API providers as well.
