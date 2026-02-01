@@ -2,50 +2,92 @@
 
 An open-source Claude for Excel clone. A Microsoft Office Excel Add-in with an integrated AI chat interface that lets you chat with LLM providers (OpenAI, Anthropic, Google, etc.) directly within Excel using your own API keys (BYOK).
 
-## Prerequisites
+## Installation (End Users)
 
-- [Node.js](https://nodejs.org/) (v18 or higher recommended)
-- Microsoft Excel (desktop version)
-- npm or yarn
+Download [`manifest.prod.xml`](./manifest.prod.xml) and follow the instructions for your platform:
 
-## Installation
+### Windows
 
-```bash
-npm install
-```
+1. Open Excel
+2. Go to **Insert** → **Add-ins** → **My Add-ins**
+3. Click **Upload My Add-in**
+4. Browse to `manifest.prod.xml` and click OK
+5. Click **"Open AI Chat"** in the Home tab ribbon
+
+### macOS
+
+1. Copy `manifest.prod.xml` to:
+   ```
+   ~/Library/Containers/com.microsoft.Excel/Data/Documents/wef/
+   ```
+   You can do this via Terminal:
+   ```bash
+   mkdir -p ~/Library/Containers/com.microsoft.Excel/Data/Documents/wef
+   cp manifest.prod.xml ~/Library/Containers/com.microsoft.Excel/Data/Documents/wef/
+   ```
+2. Quit and reopen Excel
+3. Go to **Insert** → **Add-ins** → **My Add-ins**
+4. Select "OpenExcel" under **Shared Folder**
+
+### Excel for Web
+
+1. Open a workbook at [excel.office.com](https://excel.office.com)
+2. Click **Insert** → **Add-ins** → **More Add-ins**
+3. Click **Upload My Add-in**
+4. Upload `manifest.prod.xml`
+
+> **Note:** The "Upload My Add-in" option may be disabled by your organization's IT admin.
+
+---
 
 ## Development
 
-### Start the Add-in
+### Prerequisites
+
+- [Node.js](https://nodejs.org/) (v18 or higher recommended)
+- Microsoft Excel (desktop version)
+- pnpm (or npm/yarn)
+
+### Setup
+
+```bash
+pnpm install
+```
+
+### Start Dev Server
 
 This command starts the dev server and sideloads the add-in into Excel:
 
 ```bash
-npm run start
+pnpm start
 ```
 
 Excel will launch automatically with the add-in loaded in the taskpane.
 
 ### Stop the Add-in
 
-To stop debugging and unload the add-in:
-
 ```bash
-npm run stop
+pnpm stop
 ```
 
-### Other Useful Commands
+### Deploy to Production
+
+Builds and deploys to Cloudflare Pages:
+
+```bash
+pnpm deploy
+```
+
+### Other Commands
 
 | Command | Description |
 |---------|-------------|
-| `npm run dev-server` | Start the dev server only (https://localhost:3000) |
-| `npm run build` | Production build |
-| `npm run build:dev` | Development build |
-| `npm run watch` | Watch mode for development |
-| `npm run lint` | Run linter |
-| `npm run lint:fix` | Fix linting issues |
-| `npm run typecheck` | TypeScript type checking |
-| `npm run validate` | Validate the Office manifest |
+| `pnpm dev-server` | Start dev server only (https://localhost:3000) |
+| `pnpm build` | Production build |
+| `pnpm deploy` | Build and deploy to Cloudflare Pages |
+| `pnpm lint` | Run linter |
+| `pnpm typecheck` | TypeScript type checking |
+| `pnpm validate` | Validate the Office manifest |
 
 ## Claude for Excel Parity
 
