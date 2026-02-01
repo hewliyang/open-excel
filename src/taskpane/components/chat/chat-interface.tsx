@@ -1,5 +1,5 @@
-import { MessageSquare, Moon, Settings, Sun, Trash2 } from "lucide-react";
-import { type ReactNode, useState } from "react";
+import { Check, ChevronDown, MessageSquare, Moon, Plus, Settings, Sun, Trash2 } from "lucide-react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { ChatProvider, useChat } from "./chat-context";
 import { ChatInput } from "./chat-input";
 import { MessageList } from "./message-list";
@@ -99,6 +99,114 @@ function TabButton({ active, onClick, children }: { active: boolean; onClick: ()
   );
 }
 
+function SessionDropdown({ onSelect }: { onSelect: () => void }) {
+  const { state, newSession, switchSession, deleteCurrentSession } = useChat();
+  const [open, setOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    if (open) document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [open]);
+
+  const currentName = state.currentSession?.name ?? "New Chat";
+  const truncatedName = currentName.length > 20 ? `${currentName.slice(0, 18)}…` : currentName;
+
+  const handleNewSession = async () => {
+    console.log("[UI] handleNewSession clicked");
+    await newSession();
+    console.log("[UI] newSession completed");
+    setOpen(false);
+    onSelect();
+  };
+
+  const handleSwitch = async (id: string) => {
+    await switchSession(id);
+    setOpen(false);
+    onSelect();
+  };
+
+  return (
+    <div className="relative" ref={dropdownRef}>
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className={`
+          flex items-center gap-1 px-3 py-2 text-xs uppercase tracking-wider
+          border-b-2 border-(--chat-accent) text-(--chat-text-primary) transition-colors
+        `}
+        style={{ fontFamily: "var(--chat-font-mono)" }}
+      >
+        <MessageSquare size={12} />
+        <span className="max-w-[100px] truncate">{truncatedName}</span>
+        <ChevronDown size={12} className={`transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+
+      {open && (
+        <div
+          className="absolute top-full left-0 mt-1 w-56 bg-(--chat-bg) border border-(--chat-border) rounded shadow-lg z-50 overflow-hidden"
+          style={{ fontFamily: "var(--chat-font-mono)" }}
+        >
+          <button
+            type="button"
+            onClick={handleNewSession}
+            className="w-full flex items-center gap-2 px-3 py-2 text-xs text-(--chat-accent) hover:bg-(--chat-bg-secondary) transition-colors border-b border-(--chat-border)"
+          >
+            <Plus size={14} />
+            New Chat
+          </button>
+
+          <div className="max-h-48 overflow-y-auto">
+            {state.sessions.map((session) => (
+              <div
+                key={session.id}
+                className={`
+                  flex items-center justify-between px-3 py-2 text-xs hover:bg-(--chat-bg-secondary) transition-colors cursor-pointer
+                  ${session.id === state.currentSession?.id ? "bg-(--chat-bg-secondary)" : ""}
+                `}
+                onClick={() => handleSwitch(session.id)}
+                onKeyDown={(e) => e.key === "Enter" && handleSwitch(session.id)}
+              >
+                <div className="flex items-center gap-2 min-w-0 flex-1">
+                  {session.id === state.currentSession?.id ? (
+                    <Check size={12} className="text-(--chat-accent) shrink-0" />
+                  ) : (
+                    <div className="w-3 shrink-0" />
+                  )}
+                  <span className="truncate text-(--chat-text-primary)">{session.name}</span>
+                </div>
+                <span className="text-[10px] text-(--chat-text-muted) shrink-0 ml-2">
+                  {session.messages.length}
+                </span>
+              </div>
+            ))}
+          </div>
+
+          {state.sessions.length > 1 && state.currentSession && (
+            <button
+              type="button"
+              onClick={async (e) => {
+                e.stopPropagation();
+                await deleteCurrentSession();
+                setOpen(false);
+              }}
+              className="w-full flex items-center gap-2 px-3 py-2 text-xs text-(--chat-error) hover:bg-(--chat-bg-secondary) transition-colors border-t border-(--chat-border)"
+            >
+              <Trash2 size={14} />
+              Delete Current Session
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ChatHeader({
   activeTab,
   onTabChange,
@@ -116,10 +224,14 @@ function ChatHeader({
     <div className="border-b border-(--chat-border) bg-(--chat-bg)">
       <div className="flex items-center justify-between px-2">
         <div className="flex">
-          <TabButton active={activeTab === "chat"} onClick={() => onTabChange("chat")}>
-            <MessageSquare size={12} />
-            Chat
-          </TabButton>
+          {activeTab === "chat" ? (
+            <SessionDropdown onSelect={() => onTabChange("chat")} />
+          ) : (
+            <TabButton active={false} onClick={() => onTabChange("chat")}>
+              <MessageSquare size={12} />
+              Chat
+            </TabButton>
+          )}
           <TabButton active={activeTab === "settings"} onClick={() => onTabChange("settings")}>
             <Settings size={12} />
             Settings

@@ -30,8 +30,10 @@
   "dependencies": {
     "@mariozechner/pi-agent-core": "^0.50.7",
     "@mariozechner/pi-ai": "^0.50.7",
+    "@sinclair/typebox": "^0.34.48",
     "@streamdown/code": "^1.0.1",
     "core-js": "^3.36.0",
+    "dexie": "^4.3.0",
     "es6-promise": "^4.2.8",
     "lucide-react": "^0.563.0",
     "react": "^18.2.0",

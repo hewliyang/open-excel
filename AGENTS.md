@@ -95,11 +95,11 @@ DefinePlugin: { "process.versions": "undefined" }  // Prevents Node.js-only impo
 ## Development Commands
 
 ```bash
-npm install              # Install dependencies
-npm run dev-server       # Start dev server (https://localhost:3000)
-npm start                # Launch Excel with add-in sideloaded
-npm run build            # Production build
-npm run build:dev        # Development build
+pnpm install             # Install dependencies
+pnpm dev-server          # Start dev server (https://localhost:3000)
+pnpm start               # Launch Excel with add-in sideloaded
+pnpm build               # Production build
+pnpm build:dev           # Development build
 ```
 
 ## Configuration Storage

@@ -16,6 +16,16 @@ import {
 import type { ReactNode } from "react";
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { getWorkbookMetadata } from "../../../lib/excel/api";
+import {
+  type ChatSession,
+  createSession,
+  deleteSession,
+  getOrCreateCurrentSession,
+  getOrCreateWorkbookId,
+  getSession,
+  listSessions,
+  saveSession,
+} from "../../../lib/storage";
 import { EXCEL_TOOLS } from "../../../lib/tools";
 
 export type ToolCallStatus = "pending" | "running" | "complete" | "error";
@@ -90,6 +100,8 @@ interface ChatState {
   error: string | null;
   providerConfig: ProviderConfig | null;
   sessionStats: SessionStats;
+  currentSession: ChatSession | null;
+  sessions: ChatSession[];
 }
 
 const INITIAL_STATS: SessionStats = {
@@ -110,6 +122,9 @@ interface ChatContextValue {
   abort: () => void;
   availableProviders: string[];
   getModelsForProvider: (provider: string) => Model<any>[];
+  newSession: () => Promise<void>;
+  switchSession: (sessionId: string) => Promise<void>;
+  deleteCurrentSession: () => Promise<void>;
 }
 
 const ChatContext = createContext<ChatContextValue | null>(null);
@@ -187,6 +202,8 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       error: null,
       providerConfig: validConfig,
       sessionStats: INITIAL_STATS,
+      currentSession: null,
+      sessions: [],
     };
   });
 
@@ -194,6 +211,9 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   const streamingMessageIdRef = useRef<string | null>(null);
   const isStreamingRef = useRef(false);
   const pendingConfigRef = useRef<ProviderConfig | null>(null);
+  const workbookIdRef = useRef<string | null>(null);
+  const sessionLoadedRef = useRef(false);
+  const currentSessionIdRef = useRef<string | null>(null);
 
   const availableProviders = getProviders();
 
@@ -486,13 +506,134 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   const clearMessages = useCallback(() => {
     abort();
     agentRef.current?.reset();
+    if (currentSessionIdRef.current) {
+      saveSession(currentSessionIdRef.current, []).catch(console.error);
+    }
     setState((prev) => ({ ...prev, messages: [], error: null, sessionStats: INITIAL_STATS }));
   }, [abort]);
+
+  const refreshSessions = useCallback(async () => {
+    if (!workbookIdRef.current) return;
+    const sessions = await listSessions(workbookIdRef.current);
+    console.log("[Chat] refreshSessions:", sessions.map((s) => ({ id: s.id, name: s.name, msgs: s.messages.length })));
+    setState((prev) => ({ ...prev, sessions }));
+  }, []);
+
+  const newSession = useCallback(async () => {
+    console.log("[Chat] newSession called, workbookId:", workbookIdRef.current);
+    if (!workbookIdRef.current) {
+      console.error("[Chat] Cannot create session: workbookId not set");
+      return;
+    }
+    try {
+      abort();
+      agentRef.current?.reset();
+      const session = await createSession(workbookIdRef.current);
+      console.log("[Chat] Created new session:", session.id);
+      currentSessionIdRef.current = session.id;
+      await refreshSessions();
+      setState((prev) => ({
+        ...prev,
+        messages: [],
+        currentSession: session,
+        error: null,
+        sessionStats: INITIAL_STATS,
+      }));
+    } catch (err) {
+      console.error("[Chat] Failed to create session:", err);
+    }
+  }, [abort, refreshSessions]);
+
+  const switchSession = useCallback(
+    async (sessionId: string) => {
+      console.log("[Chat] switchSession called:", sessionId, "current:", currentSessionIdRef.current);
+      if (currentSessionIdRef.current === sessionId) return;
+      abort();
+      agentRef.current?.reset();
+      try {
+        const session = await getSession(sessionId);
+        console.log("[Chat] Got session:", session?.id, "messages:", session?.messages.length);
+        if (!session) {
+          console.error("[Chat] Session not found:", sessionId);
+          return;
+        }
+        currentSessionIdRef.current = session.id;
+        setState((prev) => ({
+          ...prev,
+          messages: session.messages,
+          currentSession: session,
+          error: null,
+          sessionStats: INITIAL_STATS,
+        }));
+      } catch (err) {
+        console.error("[Chat] Failed to switch session:", err);
+      }
+    },
+    [abort],
+  );
+
+  const deleteCurrentSession = useCallback(async () => {
+    if (!currentSessionIdRef.current || !workbookIdRef.current) return;
+    abort();
+    agentRef.current?.reset();
+    await deleteSession(currentSessionIdRef.current);
+    const session = await getOrCreateCurrentSession(workbookIdRef.current);
+    currentSessionIdRef.current = session.id;
+    await refreshSessions();
+    setState((prev) => ({
+      ...prev,
+      messages: session.messages,
+      currentSession: session,
+      error: null,
+      sessionStats: INITIAL_STATS,
+    }));
+  }, [abort, refreshSessions]);
+
+  const prevStreamingRef = useRef(false);
+  useEffect(() => {
+    if (prevStreamingRef.current && !state.isStreaming && currentSessionIdRef.current) {
+      const sessionId = currentSessionIdRef.current;
+      saveSession(sessionId, state.messages)
+        .then(async () => {
+          await refreshSessions();
+          const updated = await getSession(sessionId);
+          if (updated) {
+            setState((prev) => ({ ...prev, currentSession: updated }));
+          }
+        })
+        .catch(console.error);
+    }
+    prevStreamingRef.current = state.isStreaming;
+  }, [state.isStreaming, state.messages, refreshSessions]);
 
   useEffect(() => {
     return () => {
       agentRef.current?.abort();
     };
+  }, []);
+
+  useEffect(() => {
+    if (sessionLoadedRef.current) return;
+    sessionLoadedRef.current = true;
+
+    getOrCreateWorkbookId()
+      .then(async (id) => {
+        workbookIdRef.current = id;
+        console.log("[Chat] Workbook ID:", id);
+        const session = await getOrCreateCurrentSession(id);
+        currentSessionIdRef.current = session.id;
+        const sessions = await listSessions(id);
+        console.log("[Chat] Loaded session:", session.id, "with", session.messages.length, "messages");
+        setState((prev) => ({
+          ...prev,
+          messages: session.messages,
+          currentSession: session,
+          sessions,
+        }));
+      })
+      .catch((err) => {
+        console.error("[Chat] Failed to load session:", err);
+      });
   }, []);
 
   useEffect(() => {
@@ -512,6 +653,9 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         abort,
         availableProviders,
         getModelsForProvider,
+        newSession,
+        switchSession,
+        deleteCurrentSession,
       }}
     >
       {children}
