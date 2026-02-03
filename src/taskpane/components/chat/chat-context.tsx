@@ -135,7 +135,7 @@ const INITIAL_STATS: SessionStats = {
 
 interface ChatContextValue {
   state: ChatState;
-  sendMessage: (content: string) => Promise<void>;
+  sendMessage: (content: string, attachments?: string[]) => Promise<void>;
   setProviderConfig: (config: ProviderConfig) => void;
   clearMessages: () => void;
   abort: () => void;
@@ -153,13 +153,21 @@ const ChatContext = createContext<ChatContextValue | null>(null);
 const SYSTEM_PROMPT = `You are an AI assistant integrated into Microsoft Excel with full access to read and modify spreadsheet data.
 
 Available tools:
-READ:
+
+FILES & SHELL:
+- read: Read uploaded files (images, CSV, text). Images are returned for visual analysis.
+- bash: Execute bash commands in a sandboxed virtual filesystem. User uploads are in /home/user/uploads/.
+  Supports: ls, cat, grep, find, awk, sed, jq, sort, uniq, wc, cut, head, tail, etc.
+
+When the user uploads files, an <attachments> section lists their paths. Use read to access them.
+
+EXCEL READ:
 - get_cell_ranges: Read cell values, formulas, and formatting
 - get_range_as_csv: Get data as CSV (great for analysis)
 - search_data: Find text across the spreadsheet
 - get_all_objects: List charts, pivot tables, etc.
 
-WRITE:
+EXCEL WRITE:
 - set_cell_range: Write values, formulas, and formatting
 - clear_cell_range: Clear contents or formatting
 - copy_to: Copy ranges with formula translation
@@ -510,7 +518,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const sendMessage = useCallback(
-    async (content: string) => {
+    async (content: string, attachments?: string[]) => {
       if (pendingConfigRef.current) {
         applyConfig(pendingConfigRef.current);
       }
@@ -553,6 +561,13 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         } catch (err) {
           console.error("[Chat] Failed to get workbook metadata:", err);
         }
+
+        // Add attachments section if files are uploaded
+        if (attachments && attachments.length > 0) {
+          const paths = attachments.map((name) => `/home/user/uploads/${name}`).join("\n");
+          promptContent = `<attachments>\n${paths}\n</attachments>\n\n${promptContent}`;
+        }
+
         await agent.prompt(promptContent);
         console.log("[Chat] Full context:", agent.state.messages);
       } catch (err) {

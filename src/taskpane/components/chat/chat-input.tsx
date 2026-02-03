@@ -1,11 +1,34 @@
-import { Send, Square } from "lucide-react";
-import { type KeyboardEvent, useCallback, useEffect, useRef, useState } from "react";
+import { Paperclip, Send, Square, X } from "lucide-react";
+import { type ChangeEvent, type KeyboardEvent, useCallback, useEffect, useRef, useState } from "react";
+import { listUploads, writeFile } from "../../../lib/vfs";
 import { useChat } from "./chat-context";
+
+interface UploadedFile {
+  name: string;
+  size: number;
+}
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes}B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
+}
 
 export function ChatInput() {
   const { sendMessage, state, abort } = useChat();
   const [input, setInput] = useState("");
+  const [uploads, setUploads] = useState<UploadedFile[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Load existing uploads on mount
+  useEffect(() => {
+    listUploads().then((files) => {
+      // We don't have size info from listUploads, so just show names
+      setUploads(files.map((name) => ({ name, size: 0 })));
+    });
+  }, []);
 
   const adjustHeight = useCallback(() => {
     const textarea = textareaRef.current;
@@ -22,9 +45,10 @@ export function ChatInput() {
   const handleSubmit = useCallback(async () => {
     const trimmed = input.trim();
     if (!trimmed || state.isStreaming) return;
+    const attachmentNames = uploads.map((u) => u.name);
     setInput("");
-    await sendMessage(trimmed);
-  }, [input, state.isStreaming, sendMessage]);
+    await sendMessage(trimmed, attachmentNames.length > 0 ? attachmentNames : undefined);
+  }, [input, state.isStreaming, sendMessage, uploads]);
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -36,10 +60,106 @@ export function ChatInput() {
     [handleSubmit],
   );
 
+  const handleFileSelect = useCallback(async (e: ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    setIsUploading(true);
+    try {
+      for (const file of Array.from(files)) {
+        const buffer = await file.arrayBuffer();
+        const data = new Uint8Array(buffer);
+        await writeFile(file.name, data);
+        setUploads((prev) => {
+          // Replace if exists, otherwise add
+          const exists = prev.some((u) => u.name === file.name);
+          if (exists) {
+            return prev.map((u) => (u.name === file.name ? { name: file.name, size: file.size } : u));
+          }
+          return [...prev, { name: file.name, size: file.size }];
+        });
+      }
+    } catch (err) {
+      console.error("Failed to upload file:", err);
+    } finally {
+      setIsUploading(false);
+      // Reset input so same file can be selected again
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+    }
+  }, []);
+
+  const handleRemoveFile = useCallback((name: string) => {
+    // Note: We don't actually delete from VFS, just hide from UI
+    // Files remain accessible to the agent
+    setUploads((prev) => prev.filter((u) => u.name !== name));
+  }, []);
+
+  const openFilePicker = useCallback(() => {
+    fileInputRef.current?.click();
+  }, []);
+
   return (
     <div className="border-t border-(--chat-border) p-3 bg-(--chat-bg)" style={{ fontFamily: "var(--chat-font-mono)" }}>
       {state.error && <div className="text-(--chat-error) text-xs mb-2 px-1">{state.error}</div>}
+
+      {/* Uploaded files chips */}
+      {uploads.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 mb-2">
+          {uploads.map((file) => (
+            <div
+              key={file.name}
+              className="flex items-center gap-1 px-2 py-1 text-[10px] bg-(--chat-bg-secondary) border border-(--chat-border) text-(--chat-text-secondary)"
+              style={{ borderRadius: "var(--chat-radius)" }}
+            >
+              <span className="max-w-[120px] truncate" title={file.name}>
+                {file.name}
+              </span>
+              {file.size > 0 && <span className="text-(--chat-text-muted)">{formatFileSize(file.size)}</span>}
+              <button
+                type="button"
+                onClick={() => handleRemoveFile(file.name)}
+                className="ml-0.5 text-(--chat-text-muted) hover:text-(--chat-error) transition-colors"
+                title="Remove from list"
+              >
+                <X size={10} />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
       <div className="flex items-end gap-2">
+        {/* Hidden file input */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          onChange={handleFileSelect}
+          className="hidden"
+          accept="image/*,.txt,.csv,.json,.xml,.md,.html,.css,.js,.ts,.py,.sh"
+        />
+
+        {/* Upload button */}
+        <button
+          type="button"
+          onClick={openFilePicker}
+          disabled={isUploading || state.isStreaming}
+          className={`
+            p-2 border border-(--chat-border) bg-(--chat-bg-secondary)
+            text-(--chat-text-secondary)
+            hover:bg-(--chat-bg-tertiary) hover:text-(--chat-text-primary)
+            hover:border-(--chat-border-active)
+            disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-(--chat-bg-secondary)
+            transition-colors
+          `}
+          style={{ borderRadius: "var(--chat-radius)" }}
+          title="Upload files"
+        >
+          <Paperclip size={16} className={isUploading ? "animate-pulse" : ""} />
+        </button>
+
         <textarea
           ref={textareaRef}
           value={input}

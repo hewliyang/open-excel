@@ -653,6 +653,8 @@ export async function setCellRange(
         }
 
         if (cell.note) {
+          // Add note (yellow sticky note) using the worksheet notes API
+          // notes.add() takes cell address string and content
           cellRange.load("address");
           await context.sync();
           const cellAddr = cellRange.address.split("!")[1] || cellRange.address;

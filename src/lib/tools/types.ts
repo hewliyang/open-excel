@@ -1,11 +1,8 @@
-import type { AgentTool } from "@mariozechner/pi-agent-core";
+import type { AgentTool, AgentToolResult } from "@mariozechner/pi-agent-core";
 import type { Static, TObject } from "@sinclair/typebox";
 import type { DirtyRange } from "../dirty-tracker";
 
-export interface ToolResult {
-  content: { type: "text"; text: string }[];
-  details: undefined;
-}
+export type ToolResult = AgentToolResult<undefined>;
 
 export interface DirtyTrackingConfig<T> {
   /** Derive dirty ranges from params and optionally the result (for success only) */
@@ -65,6 +62,20 @@ export function toolSuccess(data: unknown): ToolResult {
 export function toolError(message: string): ToolResult {
   return {
     content: [{ type: "text", text: JSON.stringify({ success: false, error: message }) }],
+    details: undefined,
+  };
+}
+
+export function toolImage(base64Data: string, mimeType: string): ToolResult {
+  return {
+    content: [{ type: "image", data: base64Data, mimeType }],
+    details: undefined,
+  };
+}
+
+export function toolText(text: string): ToolResult {
+  return {
+    content: [{ type: "text", text }],
     details: undefined,
   };
 }

@@ -1,3 +1,4 @@
+export { bashTool } from "./bash";
 export { clearCellRangeTool } from "./clear-cell-range";
 export { copyToTool } from "./copy-to";
 export { evalOfficeJsTool } from "./eval-officejs";
@@ -7,11 +8,13 @@ export { getRangeAsCsvTool } from "./get-range-as-csv";
 export { modifyObjectTool } from "./modify-object";
 export { modifySheetStructureTool } from "./modify-sheet-structure";
 export { modifyWorkbookStructureTool } from "./modify-workbook-structure";
+export { readTool } from "./read-file";
 export { resizeRangeTool } from "./resize-range";
 export { searchDataTool } from "./search-data";
 export { setCellRangeTool } from "./set-cell-range";
-export { defineTool, type ToolResult, toolError, toolSuccess } from "./types";
+export { defineTool, type ToolResult, toolError, toolImage, toolSuccess, toolText } from "./types";
 
+import { bashTool } from "./bash";
 import { clearCellRangeTool } from "./clear-cell-range";
 import { copyToTool } from "./copy-to";
 import { evalOfficeJsTool } from "./eval-officejs";
@@ -21,15 +24,21 @@ import { getRangeAsCsvTool } from "./get-range-as-csv";
 import { modifyObjectTool } from "./modify-object";
 import { modifySheetStructureTool } from "./modify-sheet-structure";
 import { modifyWorkbookStructureTool } from "./modify-workbook-structure";
+import { readTool } from "./read-file";
 import { resizeRangeTool } from "./resize-range";
 import { searchDataTool } from "./search-data";
 import { setCellRangeTool } from "./set-cell-range";
 
 export const EXCEL_TOOLS = [
+  // File & Bash tools
+  readTool,
+  bashTool,
+  // Excel read tools
   getCellRangesTool,
   getRangeAsCsvTool,
   searchDataTool,
   getAllObjectsTool,
+  // Excel write tools
   setCellRangeTool,
   clearCellRangeTool,
   copyToTool,
