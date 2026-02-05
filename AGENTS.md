@@ -100,7 +100,30 @@ pnpm dev-server          # Start dev server (https://localhost:3000)
 pnpm start               # Launch Excel with add-in sideloaded
 pnpm build               # Production build
 pnpm build:dev           # Development build
+pnpm lint                # Run Biome linter
+pnpm format              # Format code with Biome
+pnpm typecheck           # TypeScript type checking
 ```
+
+## Code Style
+
+- Formatter/linter: Biome
+- No JSDoc comments on functions (keep code clean)
+- Run `pnpm format` before committing
+
+## Release Workflow
+
+Releases are triggered by pushing a version tag. CI runs quality checks, deploys to Cloudflare Pages, and auto-creates a GitHub release.
+
+```bash
+pnpm version patch       # Bump version (patch/minor/major), creates git tag
+git push && git push --tags
+```
+
+CI workflow (`.github/workflows/release.yml`):
+1. Runs typecheck, lint, build
+2. Deploys to Cloudflare Pages
+3. Creates GitHub release with auto-generated notes
 
 ## Configuration Storage
 
