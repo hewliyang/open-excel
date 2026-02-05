@@ -105,19 +105,11 @@ function DirtyRangeSummary({ ranges }: { ranges: DirtyRange[] }) {
   if (merged.length === 0) return null;
 
   if (merged.length === 1) {
-    return (
-      <span className="text-[10px] text-(--chat-warning) truncate">
-        → {formatRangeBrief(merged[0])}
-      </span>
-    );
+    return <span className="text-[10px] text-(--chat-warning) truncate">→ {formatRangeBrief(merged[0])}</span>;
   }
 
   // Multiple ranges - show count
-  return (
-    <span className="text-[10px] text-(--chat-warning)">
-      → {merged.length} ranges
-    </span>
-  );
+  return <span className="text-[10px] text-(--chat-warning)">→ {merged.length} ranges</span>;
 }
 
 function ToolCallBlock({ part }: { part: ToolCallPart }) {
