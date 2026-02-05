@@ -42,7 +42,7 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages deploy dist --project-name=openexcel --commit-dirty=true
+          command: pages deploy dist --project-name=openexcel --branch=main --commit-dirty=true
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
