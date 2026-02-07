@@ -14,6 +14,13 @@ import { getCustomCommands } from "./custom-commands";
 let fs: InMemoryFs | null = null;
 let bash: Bash | null = null;
 
+// Skill files are mounted on every VFS creation (global, not per-session)
+let skillFilesCache: Record<string, Uint8Array | string> = {};
+
+export function setSkillFiles(files: Record<string, Uint8Array | string>): void {
+  skillFilesCache = files;
+}
+
 /**
  * Get or create the virtual filesystem instance
  */
@@ -21,6 +28,7 @@ export function getVfs(): InMemoryFs {
   if (!fs) {
     fs = new InMemoryFs({
       "/home/user/uploads/.keep": "",
+      ...skillFilesCache,
     });
   }
   return fs;
@@ -58,6 +66,8 @@ export async function snapshotVfs(): Promise<{ path: string; data: Uint8Array }[
   const files: { path: string; data: Uint8Array }[] = [];
 
   for (const p of allPaths) {
+    // Skip skill files — they're managed globally, not per-session
+    if (p.startsWith("/home/skills/")) continue;
     try {
       const stat = await vfs.stat(p);
       if (stat.isFile) {
@@ -79,14 +89,15 @@ export async function restoreVfs(files: { path: string; data: Uint8Array }[]): P
   resetVfs();
 
   if (files.length === 0) {
-    // Just initialize the default VFS
+    // Just initialize the default VFS (includes skills from cache)
     getVfs();
     return;
   }
 
-  // Build InitialFiles record from snapshot
+  // Build InitialFiles record: skills (global) + session files
   const initialFiles: Record<string, Uint8Array | string> = {
     "/home/user/uploads/.keep": "",
+    ...skillFilesCache,
   };
   for (const f of files) {
     initialFiles[f.path] = f.data;

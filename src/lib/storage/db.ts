@@ -17,9 +17,17 @@ export interface VfsFile {
   data: Uint8Array;
 }
 
+export interface SkillFile {
+  id: string; // "{skillName}:{path}" composite key
+  skillName: string;
+  path: string; // relative path within skill folder, e.g. "SKILL.md"
+  data: Uint8Array;
+}
+
 class OpenExcelDB extends Dexie {
   sessions!: Table<ChatSession, string>;
   vfsFiles!: Table<VfsFile, string>;
+  skillFiles!: Table<SkillFile, string>;
 
   constructor() {
     super("OpenExcelDB_v3");
@@ -29,6 +37,11 @@ class OpenExcelDB extends Dexie {
     this.version(2).stores({
       sessions: "id, workbookId, updatedAt",
       vfsFiles: "id, sessionId",
+    });
+    this.version(3).stores({
+      sessions: "id, workbookId, updatedAt",
+      vfsFiles: "id, sessionId",
+      skillFiles: "id, skillName",
     });
   }
 }
@@ -155,4 +168,40 @@ export async function loadVfsFiles(sessionId: string): Promise<{ path: string; d
 
 export async function deleteVfsFiles(sessionId: string): Promise<void> {
   await db.vfsFiles.where("sessionId").equals(sessionId).delete();
+}
+
+
+export async function saveSkillFiles(skillName: string, files: { path: string; data: Uint8Array }[]): Promise<void> {
+  await db.transaction("rw", db.skillFiles, async () => {
+    await db.skillFiles.where("skillName").equals(skillName).delete();
+    if (files.length > 0) {
+      await db.skillFiles.bulkAdd(
+        files.map((f) => ({
+          id: `${skillName}:${f.path}`,
+          skillName,
+          path: f.path,
+          data: f.data,
+        })),
+      );
+    }
+  });
+}
+
+export async function loadSkillFiles(skillName: string): Promise<{ path: string; data: Uint8Array }[]> {
+  const rows = await db.skillFiles.where("skillName").equals(skillName).toArray();
+  return rows.map((r) => ({ path: r.path, data: r.data }));
+}
+
+export async function loadAllSkillFiles(): Promise<{ skillName: string; path: string; data: Uint8Array }[]> {
+  const rows = await db.skillFiles.toArray();
+  return rows.map((r) => ({ skillName: r.skillName, path: r.path, data: r.data }));
+}
+
+export async function deleteSkillFiles(skillName: string): Promise<void> {
+  await db.skillFiles.where("skillName").equals(skillName).delete();
+}
+
+export async function listSkillNames(): Promise<string[]> {
+  const keys = await db.skillFiles.orderBy("skillName").uniqueKeys();
+  return keys as string[];
 }

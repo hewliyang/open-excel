@@ -18,6 +18,14 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState } f
 import type { DirtyRange } from "../../../lib/dirty-tracker";
 import { getWorkbookMetadata, navigateTo } from "../../../lib/excel/api";
 import {
+  addSkill,
+  buildSkillsPromptSection,
+  getInstalledSkills,
+  removeSkill,
+  type SkillMeta,
+  syncSkillsToVfs,
+} from "../../../lib/skills";
+import {
   type ChatSession,
   createSession,
   deleteSession,
@@ -131,6 +139,7 @@ interface ChatState {
   sheetNames: Record<number, string>;
   uploads: UploadedFile[];
   isUploading: boolean;
+  skills: SkillMeta[];
 }
 
 const INITIAL_STATS: SessionStats = {
@@ -158,11 +167,14 @@ interface ChatContextValue {
   toggleFollowMode: () => void;
   processFiles: (files: File[]) => Promise<void>;
   removeUpload: (name: string) => Promise<void>;
+  installSkill: (files: File[]) => Promise<void>;
+  uninstallSkill: (name: string) => Promise<void>;
 }
 
 const ChatContext = createContext<ChatContextValue | null>(null);
 
-const SYSTEM_PROMPT = `You are an AI assistant integrated into Microsoft Excel with full access to read and modify spreadsheet data.
+function buildSystemPrompt(skills: SkillMeta[]): string {
+  return `You are an AI assistant integrated into Microsoft Excel with full access to read and modify spreadsheet data.
 
 Available tools:
 
@@ -212,7 +224,11 @@ Citations: Use markdown links with #cite: hash to reference sheets/cells. Clicki
 - Cell/range: [A1:B10](#cite:sheetId!A1:B10)
 Example: [Exchange Ratio](#cite:3) or [see cell B5](#cite:3!B5)
 
-When the user asks about their data, read it first. Be concise. Use A1 notation for cell references.`;
+When the user asks about their data, read it first. Be concise. Use A1 notation for cell references.
+
+${buildSkillsPromptSection(skills)}
+`;
+}
 
 function generateId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
@@ -267,6 +283,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       sheetNames: {},
       uploads: [],
       isUploading: false,
+      skills: [],
     };
   });
 
@@ -278,6 +295,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   const sessionLoadedRef = useRef(false);
   const currentSessionIdRef = useRef<string | null>(null);
   const followModeRef = useRef(state.providerConfig?.followMode ?? true);
+  const skillsRef = useRef<SkillMeta[]>([]);
 
   const availableProviders = getProviders();
 
@@ -493,10 +511,18 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         agentRef.current.abort();
       }
 
+      const systemPrompt = buildSystemPrompt(skillsRef.current);
+      console.log(
+        "[Chat] Skills in prompt:",
+        skillsRef.current.length,
+        skillsRef.current.map((s) => s.name),
+      );
+      console.log("[Chat] System prompt tail:", systemPrompt.slice(-500));
+
       const agent = new Agent({
         initialState: {
           model: proxiedModel,
-          systemPrompt: SYSTEM_PROMPT,
+          systemPrompt,
           thinkingLevel: thinkingLevelToAgent(config.thinking),
           tools: EXCEL_TOOLS,
           messages: existingMessages,
@@ -513,7 +539,6 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       pendingConfigRef.current = null;
 
       followModeRef.current = config.followMode ?? true;
-
       console.log("[Chat] Model info:", {
         id: baseModel.id,
         contextWindow: baseModel.contextWindow,
@@ -765,15 +790,28 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     if (sessionLoadedRef.current) return;
     sessionLoadedRef.current = true;
 
-    const saved = loadSavedConfig();
-    if (saved?.provider && saved?.apiKey && saved?.model) {
-      applyConfig(saved);
-    }
-
     getOrCreateWorkbookId()
       .then(async (id) => {
         workbookIdRef.current = id;
         console.log("[Chat] Workbook ID:", id);
+
+        // Load skills into VFS cache BEFORE applyConfig so the system prompt includes them
+        const skills = await getInstalledSkills();
+        skillsRef.current = skills;
+        await syncSkillsToVfs();
+        console.log(
+          "[Chat] Loaded",
+          skills.length,
+          "skills:",
+          skills.map((s) => s.name),
+        );
+
+        // Now apply provider config — agent gets the correct system prompt with skills
+        const saved = loadSavedConfig();
+        if (saved?.provider && saved?.apiKey && saved?.model) {
+          applyConfig(saved);
+        }
+
         const session = await getOrCreateCurrentSession(id);
         currentSessionIdRef.current = session.id;
         const [sessions, vfsFiles] = await Promise.all([listSessions(id), loadVfsFiles(session.id)]);
@@ -795,6 +833,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
           messages: session.messages,
           currentSession: session,
           sessions,
+          skills,
           uploads: uploadNames.map((name) => ({ name, size: 0 })),
         }));
       })
@@ -852,6 +891,58 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const refreshSkillsAndRebuildAgent = useCallback(async () => {
+    skillsRef.current = await getInstalledSkills();
+    setState((prev) => {
+      // Re-apply config to rebuild agent with updated system prompt
+      if (prev.providerConfig) {
+        applyConfig(prev.providerConfig);
+      }
+      return { ...prev, skills: skillsRef.current };
+    });
+  }, [applyConfig]);
+
+  const installSkill = useCallback(
+    async (files: File[]) => {
+      if (files.length === 0) return;
+      try {
+        const inputs = await Promise.all(
+          files.map(async (f) => {
+            // For folder uploads, webkitRelativePath is "folderName/file.md"
+            // Strip the top-level folder to get the relative path within the skill
+            const fullPath = f.webkitRelativePath || f.name;
+            const parts = fullPath.split("/");
+            const path = parts.length > 1 ? parts.slice(1).join("/") : parts[0];
+            return { path, data: new Uint8Array(await f.arrayBuffer()) };
+          }),
+        );
+        const meta = await addSkill(inputs);
+        console.log("[Chat] Installed skill:", meta.name);
+        await refreshSkillsAndRebuildAgent();
+      } catch (err) {
+        console.error("[Chat] Failed to install skill:", err);
+        setState((prev) => ({
+          ...prev,
+          error: err instanceof Error ? err.message : "Failed to install skill",
+        }));
+      }
+    },
+    [refreshSkillsAndRebuildAgent],
+  );
+
+  const uninstallSkill = useCallback(
+    async (name: string) => {
+      try {
+        await removeSkill(name);
+        console.log("[Chat] Uninstalled skill:", name);
+        await refreshSkillsAndRebuildAgent();
+      } catch (err) {
+        console.error("[Chat] Failed to uninstall skill:", err);
+      }
+    },
+    [refreshSkillsAndRebuildAgent],
+  );
+
   const toggleFollowMode = useCallback(() => {
     setState((prev) => {
       if (!prev.providerConfig) return prev;
@@ -880,6 +971,8 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         toggleFollowMode,
         processFiles,
         removeUpload,
+        installSkill,
+        uninstallSkill,
       }}
     >
       {children}
