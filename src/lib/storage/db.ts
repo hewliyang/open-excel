@@ -170,7 +170,6 @@ export async function deleteVfsFiles(sessionId: string): Promise<void> {
   await db.vfsFiles.where("sessionId").equals(sessionId).delete();
 }
 
-
 export async function saveSkillFiles(skillName: string, files: { path: string; data: Uint8Array }[]): Promise<void> {
   await db.transaction("rw", db.skillFiles, async () => {
     await db.skillFiles.where("skillName").equals(skillName).delete();
