@@ -27,8 +27,9 @@ export function defineTool<T extends TObject>(config: ToolConfig<T>): AgentTool 
 
   const wrappedExecute = async (toolCallId: string, params: Static<T>, signal?: AbortSignal): Promise<ToolResult> => {
     const result = await execute(toolCallId, params, signal);
-    const text = result.content[0]?.text;
-    if (!text) return result;
+    const first = result.content[0];
+    if (!first || first.type !== "text") return result;
+    const text = first.text;
 
     try {
       const parsed = JSON.parse(text);
@@ -62,13 +63,6 @@ export function toolSuccess(data: unknown): ToolResult {
 export function toolError(message: string): ToolResult {
   return {
     content: [{ type: "text", text: JSON.stringify({ success: false, error: message }) }],
-    details: undefined,
-  };
-}
-
-export function toolImage(base64Data: string, mimeType: string): ToolResult {
-  return {
-    content: [{ type: "image", data: base64Data, mimeType }],
     details: undefined,
   };
 }

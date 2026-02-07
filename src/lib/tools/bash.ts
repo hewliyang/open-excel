@@ -10,7 +10,6 @@ export const bashTool = defineTool({
     "The filesystem is in-memory with user uploads in /home/user/uploads/. " +
     "Useful for: file operations (ls, cat, grep, find), text processing (awk, sed, jq, sort, uniq), " +
     "data analysis (wc, cut, paste), and general scripting. " +
-    "Commands run in isolation - environment changes don't persist between calls. " +
     "Network access is disabled. Binary execution is not supported.",
   parameters: Type.Object({
     command: Type.String({
@@ -25,7 +24,6 @@ export const bashTool = defineTool({
       const bash = getBash();
       const result = await bash.exec(params.command);
 
-      // Format output similar to a real terminal
       let output = "";
 
       if (result.stdout) {

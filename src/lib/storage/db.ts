@@ -10,13 +10,25 @@ export interface ChatSession {
   updatedAt: number;
 }
 
+export interface VfsFile {
+  id: string; // "{sessionId}:{path}" composite key
+  sessionId: string;
+  path: string;
+  data: Uint8Array;
+}
+
 class OpenExcelDB extends Dexie {
   sessions!: Table<ChatSession, string>;
+  vfsFiles!: Table<VfsFile, string>;
 
   constructor() {
     super("OpenExcelDB_v3");
     this.version(1).stores({
       sessions: "id, workbookId, updatedAt",
+    });
+    this.version(2).stores({
+      sessions: "id, workbookId, updatedAt",
+      vfsFiles: "id, sessionId",
     });
   }
 }
@@ -116,4 +128,31 @@ export async function getOrCreateCurrentSession(workbookId: string): Promise<Cha
     return sessions[0];
   }
   return createSession(workbookId);
+}
+
+export async function saveVfsFiles(sessionId: string, files: { path: string; data: Uint8Array }[]): Promise<void> {
+  console.log("[DB] saveVfsFiles:", sessionId, "files:", files.length);
+  await db.transaction("rw", db.vfsFiles, async () => {
+    await db.vfsFiles.where("sessionId").equals(sessionId).delete();
+    if (files.length > 0) {
+      await db.vfsFiles.bulkAdd(
+        files.map((f) => ({
+          id: `${sessionId}:${f.path}`,
+          sessionId,
+          path: f.path,
+          data: f.data,
+        })),
+      );
+    }
+  });
+}
+
+export async function loadVfsFiles(sessionId: string): Promise<{ path: string; data: Uint8Array }[]> {
+  const rows = await db.vfsFiles.where("sessionId").equals(sessionId).toArray();
+  console.log("[DB] loadVfsFiles:", sessionId, "files:", rows.length);
+  return rows.map((r) => ({ path: r.path, data: r.data }));
+}
+
+export async function deleteVfsFiles(sessionId: string): Promise<void> {
+  await db.vfsFiles.where("sessionId").equals(sessionId).delete();
 }

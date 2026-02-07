@@ -1,6 +1,7 @@
 import { Paperclip, Send, Square, X } from "lucide-react";
 import { type ChangeEvent, type KeyboardEvent, useCallback, useEffect, useRef, useState } from "react";
-import { listUploads, writeFile } from "../../../lib/vfs";
+import { saveVfsFiles } from "../../../lib/storage";
+import { listUploads, snapshotVfs, writeFile } from "../../../lib/vfs";
 import { useChat } from "./chat-context";
 
 interface UploadedFile {
@@ -22,13 +23,14 @@ export function ChatInput() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Load existing uploads on mount
+  // Reload uploads list when session changes (VFS is swapped per session)
+  const sessionId = state.currentSession?.id;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: sessionId is an intentional trigger to reload uploads when switching sessions
   useEffect(() => {
     listUploads().then((files) => {
-      // We don't have size info from listUploads, so just show names
       setUploads(files.map((name) => ({ name, size: 0 })));
     });
-  }, []);
+  }, [sessionId]);
 
   const adjustHeight = useCallback(() => {
     const textarea = textareaRef.current;
@@ -60,35 +62,41 @@ export function ChatInput() {
     [handleSubmit],
   );
 
-  const handleFileSelect = useCallback(async (e: ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
+  const handleFileSelect = useCallback(
+    async (e: ChangeEvent<HTMLInputElement>) => {
+      const files = e.target.files;
+      if (!files || files.length === 0) return;
 
-    setIsUploading(true);
-    try {
-      for (const file of Array.from(files)) {
-        const buffer = await file.arrayBuffer();
-        const data = new Uint8Array(buffer);
-        await writeFile(file.name, data);
-        setUploads((prev) => {
-          // Replace if exists, otherwise add
-          const exists = prev.some((u) => u.name === file.name);
-          if (exists) {
-            return prev.map((u) => (u.name === file.name ? { name: file.name, size: file.size } : u));
-          }
-          return [...prev, { name: file.name, size: file.size }];
-        });
+      setIsUploading(true);
+      try {
+        for (const file of Array.from(files)) {
+          const buffer = await file.arrayBuffer();
+          const data = new Uint8Array(buffer);
+          await writeFile(file.name, data);
+          setUploads((prev) => {
+            const exists = prev.some((u) => u.name === file.name);
+            if (exists) {
+              return prev.map((u) => (u.name === file.name ? { name: file.name, size: file.size } : u));
+            }
+            return [...prev, { name: file.name, size: file.size }];
+          });
+        }
+        // Persist VFS to IndexedDB so uploads survive page reloads
+        if (state.currentSession?.id) {
+          const snapshot = await snapshotVfs();
+          await saveVfsFiles(state.currentSession.id, snapshot);
+        }
+      } catch (err) {
+        console.error("Failed to upload file:", err);
+      } finally {
+        setIsUploading(false);
+        if (fileInputRef.current) {
+          fileInputRef.current.value = "";
+        }
       }
-    } catch (err) {
-      console.error("Failed to upload file:", err);
-    } finally {
-      setIsUploading(false);
-      // Reset input so same file can be selected again
-      if (fileInputRef.current) {
-        fileInputRef.current.value = "";
-      }
-    }
-  }, []);
+    },
+    [state.currentSession?.id],
+  );
 
   const handleRemoveFile = useCallback((name: string) => {
     // Note: We don't actually delete from VFS, just hide from UI
@@ -147,17 +155,18 @@ export function ChatInput() {
           onClick={openFilePicker}
           disabled={isUploading || state.isStreaming}
           className={`
-            p-2 border border-(--chat-border) bg-(--chat-bg-secondary)
+            flex items-center justify-center
+            border border-(--chat-border) bg-(--chat-bg-secondary)
             text-(--chat-text-secondary)
             hover:bg-(--chat-bg-tertiary) hover:text-(--chat-text-primary)
             hover:border-(--chat-border-active)
             disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-(--chat-bg-secondary)
             transition-colors
           `}
-          style={{ borderRadius: "var(--chat-radius)" }}
+          style={{ borderRadius: "var(--chat-radius)", minHeight: "32px", width: "32px" }}
           title="Upload files"
         >
-          <Paperclip size={16} className={isUploading ? "animate-pulse" : ""} />
+          <Paperclip size={14} className={isUploading ? "animate-pulse" : ""} />
         </button>
 
         <textarea
@@ -178,7 +187,7 @@ export function ChatInput() {
           style={{
             borderRadius: "var(--chat-radius)",
             fontFamily: "var(--chat-font-mono)",
-            minHeight: "36px",
+            minHeight: "32px",
           }}
         />
         {state.isStreaming ? (
@@ -186,14 +195,15 @@ export function ChatInput() {
             type="button"
             onClick={abort}
             className={`
-              p-2 border border-(--chat-error) bg-(--chat-bg-secondary)
+              flex items-center justify-center
+              border border-(--chat-error) bg-(--chat-bg-secondary)
               text-(--chat-error)
               hover:bg-(--chat-error) hover:text-(--chat-bg)
               transition-colors
             `}
-            style={{ borderRadius: "var(--chat-radius)" }}
+            style={{ borderRadius: "var(--chat-radius)", minHeight: "32px", width: "32px" }}
           >
-            <Square size={16} />
+            <Square size={14} />
           </button>
         ) : (
           <button
@@ -201,16 +211,17 @@ export function ChatInput() {
             onClick={handleSubmit}
             disabled={!state.providerConfig || !input.trim()}
             className={`
-              p-2 border border-(--chat-border) bg-(--chat-bg-secondary)
+              flex items-center justify-center
+              border border-(--chat-border) bg-(--chat-bg-secondary)
               text-(--chat-text-secondary)
               hover:bg-(--chat-bg-tertiary) hover:text-(--chat-text-primary)
               hover:border-(--chat-border-active)
               disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-(--chat-bg-secondary)
               transition-colors
             `}
-            style={{ borderRadius: "var(--chat-radius)" }}
+            style={{ borderRadius: "var(--chat-radius)", minHeight: "32px", width: "32px" }}
           >
-            <Send size={16} />
+            <Send size={14} />
           </button>
         )}
       </div>

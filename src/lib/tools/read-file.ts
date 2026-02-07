@@ -1,6 +1,6 @@
 import { Type } from "@sinclair/typebox";
 import { fileExists, getFileType, listUploads, readFileBuffer, toBase64 } from "../vfs";
-import { defineTool, toolError, toolImage, toolText } from "./types";
+import { defineTool, toolError, toolText } from "./types";
 
 export const readTool = defineTool({
   name: "read",

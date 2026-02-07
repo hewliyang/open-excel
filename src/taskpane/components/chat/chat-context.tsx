@@ -25,9 +25,12 @@ import {
   getOrCreateWorkbookId,
   getSession,
   listSessions,
+  loadVfsFiles,
   saveSession,
+  saveVfsFiles,
 } from "../../../lib/storage";
 import { EXCEL_TOOLS } from "../../../lib/tools";
+import { resetVfs, restoreVfs, snapshotVfs } from "../../../lib/vfs";
 
 export type ToolCallStatus = "pending" | "running" | "complete" | "error";
 
@@ -586,8 +589,11 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   const clearMessages = useCallback(() => {
     abort();
     agentRef.current?.reset();
+    resetVfs();
     if (currentSessionIdRef.current) {
-      saveSession(currentSessionIdRef.current, []).catch(console.error);
+      Promise.all([saveSession(currentSessionIdRef.current, []), saveVfsFiles(currentSessionIdRef.current, [])]).catch(
+        console.error,
+      );
     }
     setState((prev) => ({ ...prev, messages: [], error: null, sessionStats: INITIAL_STATS }));
   }, [abort]);
@@ -614,6 +620,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     }
     try {
       agentRef.current?.reset();
+      resetVfs();
       const session = await createSession(workbookIdRef.current);
       console.log("[Chat] Created new session:", session.id);
       currentSessionIdRef.current = session.id;
@@ -639,12 +646,20 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     }
     agentRef.current?.reset();
     try {
-      const session = await getSession(sessionId);
-      console.log("[Chat] Got session:", session?.id, "messages:", session?.messages.length);
+      const [session, vfsFiles] = await Promise.all([getSession(sessionId), loadVfsFiles(sessionId)]);
+      console.log(
+        "[Chat] Got session:",
+        session?.id,
+        "messages:",
+        session?.messages.length,
+        "vfs files:",
+        vfsFiles.length,
+      );
       if (!session) {
         console.error("[Chat] Session not found:", sessionId);
         return;
       }
+      await restoreVfs(vfsFiles);
       currentSessionIdRef.current = session.id;
       setState((prev) => ({
         ...prev,
@@ -665,9 +680,13 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       return;
     }
     agentRef.current?.reset();
-    await deleteSession(currentSessionIdRef.current);
+    const deletedId = currentSessionIdRef.current;
+    await Promise.all([deleteSession(deletedId), saveVfsFiles(deletedId, [])]);
     const session = await getOrCreateCurrentSession(workbookIdRef.current);
     currentSessionIdRef.current = session.id;
+    // Restore VFS for the session we're switching to
+    const vfsFiles = await loadVfsFiles(session.id);
+    await restoreVfs(vfsFiles);
     await refreshSessions();
     setState((prev) => ({
       ...prev,
@@ -682,15 +701,21 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (prevStreamingRef.current && !state.isStreaming && currentSessionIdRef.current) {
       const sessionId = currentSessionIdRef.current;
-      saveSession(sessionId, state.messages)
-        .then(async () => {
+      // Snapshot VFS first (returns native Promise), then pass result to Dexie.
+      // Never nest Dexie calls inside non-Dexie .then() — breaks PSD zone tracking in Office SES sandbox.
+      (async () => {
+        try {
+          const vfsFiles = await snapshotVfs();
+          await Promise.all([saveSession(sessionId, state.messages), saveVfsFiles(sessionId, vfsFiles)]);
           await refreshSessions();
           const updated = await getSession(sessionId);
           if (updated) {
             setState((prev) => ({ ...prev, currentSession: updated }));
           }
-        })
-        .catch(console.error);
+        } catch (e) {
+          console.error(e);
+        }
+      })();
     }
     prevStreamingRef.current = state.isStreaming;
   }, [state.isStreaming, state.messages, refreshSessions]);
@@ -711,8 +736,19 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         console.log("[Chat] Workbook ID:", id);
         const session = await getOrCreateCurrentSession(id);
         currentSessionIdRef.current = session.id;
-        const sessions = await listSessions(id);
-        console.log("[Chat] Loaded session:", session.id, "with", session.messages.length, "messages");
+        const [sessions, vfsFiles] = await Promise.all([listSessions(id), loadVfsFiles(session.id)]);
+        if (vfsFiles.length > 0) {
+          await restoreVfs(vfsFiles);
+        }
+        console.log(
+          "[Chat] Loaded session:",
+          session.id,
+          "with",
+          session.messages.length,
+          "messages,",
+          vfsFiles.length,
+          "vfs files",
+        );
         setState((prev) => ({
           ...prev,
           messages: session.messages,

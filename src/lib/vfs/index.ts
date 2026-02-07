@@ -39,11 +39,59 @@ export function getBash(): Bash {
 }
 
 /**
- * Reset the VFS (clears all files)
+ * Reset the VFS (clears all files, creates fresh instances)
  */
 export function resetVfs(): void {
   fs = null;
   bash = null;
+}
+
+/**
+ * Snapshot all files in the VFS as path→Uint8Array pairs.
+ * Only captures files (not directories or symlinks).
+ */
+export async function snapshotVfs(): Promise<{ path: string; data: Uint8Array }[]> {
+  const vfs = getVfs();
+  const allPaths = vfs.getAllPaths();
+  const files: { path: string; data: Uint8Array }[] = [];
+
+  for (const p of allPaths) {
+    try {
+      const stat = await vfs.stat(p);
+      if (stat.isFile) {
+        const data = await vfs.readFileBuffer(p);
+        files.push({ path: p, data });
+      }
+    } catch {
+      // skip unreadable entries
+    }
+  }
+
+  return files;
+}
+
+/**
+ * Restore VFS from a snapshot. Resets existing state and writes all files.
+ */
+export async function restoreVfs(files: { path: string; data: Uint8Array }[]): Promise<void> {
+  resetVfs();
+
+  if (files.length === 0) {
+    // Just initialize the default VFS
+    getVfs();
+    return;
+  }
+
+  // Build InitialFiles record from snapshot
+  const initialFiles: Record<string, Uint8Array | string> = {
+    "/home/user/uploads/.keep": "",
+  };
+  for (const f of files) {
+    initialFiles[f.path] = f.data;
+  }
+
+  fs = new InMemoryFs(initialFiles);
+  bash = null; // will be lazily created with the new fs
 }
 
 /**
