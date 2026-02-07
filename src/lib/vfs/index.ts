@@ -7,7 +7,7 @@
  * - Agent to execute bash commands via bash tool
  */
 
-import { Bash, InMemoryFs } from "just-bash";
+import { Bash, InMemoryFs } from "just-bash/browser";
 
 // Singleton instances
 let fs: InMemoryFs | null = null;

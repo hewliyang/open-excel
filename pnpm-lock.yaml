@@ -23,9 +23,6 @@ importers:
       dexie:
         specifier: ^4.3.0
         version: 4.3.0
-      es6-promise:
-        specifier: ^4.2.8
-        version: 4.2.8
       just-bash:
         specifier: ^2.7.0
         version: 2.7.0
@@ -2510,9 +2507,6 @@ packages:
 
   es6-promise@3.3.1:
     resolution: {integrity: sha512-SOp9Phqvqn7jtEUxPWdWfWoLmyt2VaJ6MpvP9Comy1MceMXqE6bxvaTu4iaxpYYPzhny28Lc+M87/c2cPK6lDg==}
-
-  es6-promise@4.2.8:
-    resolution: {integrity: sha512-HJDGx5daxeIvxdBxvG2cb9g4tEvwIk3i8+nhX0yGrYmZUzbkdg8QbDevheDB8gd0//uPj4c1EQua8Q+MViT0/w==}
 
   esbuild@0.25.12:
     resolution: {integrity: sha512-bbPBYYrtZbkt6Os6FiTLCTFxvq4tt3JKall1vRwshA3fdVztsLAatFaZobhkBC8/BrPetoa0oksYoKXoG4ryJg==}
@@ -8355,8 +8349,6 @@ snapshots:
       is-symbol: 1.1.1
 
   es6-promise@3.3.1: {}
-
-  es6-promise@4.2.8: {}
 
   esbuild@0.25.12:
     optionalDependencies:
