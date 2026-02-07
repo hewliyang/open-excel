@@ -37,10 +37,13 @@
     "dexie": "^4.3.0",
     "just-bash": "^2.7.0",
     "lucide-react": "^0.563.0",
+    "mammoth": "^1.11.0",
+    "pdfjs-dist": "^5.4.624",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "ses": "^1.14.0",
-    "streamdown": "^2.1.0"
+    "streamdown": "^2.1.0",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.3.13",

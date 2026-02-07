@@ -171,6 +171,25 @@ FILES & SHELL:
 - bash: Execute bash commands in a sandboxed virtual filesystem. User uploads are in /home/user/uploads/.
   Supports: ls, cat, grep, find, awk, sed, jq, sort, uniq, wc, cut, head, tail, etc.
 
+  Custom commands for efficient data transfer (data flows directly, never enters your context):
+  - csv-to-sheet <file> <sheetId> [startCell] [--force] — Import CSV from VFS into spreadsheet. Auto-detects types.
+    Fails if target cells already have data. Use --force to overwrite (confirm with user first).
+  - sheet-to-csv <sheetId> [range] [file] — Export range to CSV. Defaults to full used range if no range given. Prints to stdout if no file given (pipeable).
+  - pdf-to-text <file> <outfile> — Extract text from PDF to file. Use head/grep/tail to read selectively.
+  - docx-to-text <file> <outfile> — Extract text from DOCX to file.
+  - xlsx-to-csv <file> <outfile> [sheet] — Convert XLSX/XLS/ODS sheet to CSV. Sheet by name or 0-based index.
+
+  Examples:
+    csv-to-sheet uploads/data.csv 1 A1       # import CSV to sheet 1
+    sheet-to-csv 1 export.csv                 # export entire sheet to file
+    sheet-to-csv 1 A1:D100 export.csv         # export specific range to file
+    sheet-to-csv 1 | sort -t, -k3 -rn | head -20   # pipe entire sheet to analysis
+    cut -d, -f1,3 uploads/data.csv > filtered.csv && csv-to-sheet filtered.csv 1 A1  # filter then import
+
+  IMPORTANT: When importing file data into the spreadsheet, ALWAYS prefer csv-to-sheet over reading
+  the file content and calling set_cell_range. This avoids wasting tokens on data that doesn't need
+  to pass through your context.
+
 When the user uploads files, an <attachments> section lists their paths. Use read to access them.
 
 EXCEL READ:

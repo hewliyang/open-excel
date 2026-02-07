@@ -8,6 +8,7 @@
  */
 
 import { Bash, InMemoryFs } from "just-bash/browser";
+import { getCustomCommands } from "./custom-commands";
 
 // Singleton instances
 let fs: InMemoryFs | null = null;
@@ -33,6 +34,7 @@ export function getBash(): Bash {
     bash = new Bash({
       fs: getVfs(),
       cwd: "/home/user",
+      customCommands: getCustomCommands(),
     });
   }
   return bash;

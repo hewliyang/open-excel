@@ -1,4 +1,5 @@
 import { Type } from "@sinclair/typebox";
+import { DEFAULT_MAX_BYTES, DEFAULT_MAX_LINES, formatSize, truncateTail } from "../truncate";
 import { getBash } from "../vfs";
 import { defineTool, toolError, toolSuccess } from "./types";
 
@@ -7,10 +8,11 @@ export const bashTool = defineTool({
   label: "Bash",
   description:
     "Execute bash commands in a sandboxed virtual environment. " +
+    `Output is truncated to last ${DEFAULT_MAX_LINES} lines or ${DEFAULT_MAX_BYTES / 1024}KB (whichever is hit first). ` +
     "The filesystem is in-memory with user uploads in /home/user/uploads/. " +
     "Useful for: file operations (ls, cat, grep, find), text processing (awk, sed, jq, sort, uniq), " +
     "data analysis (wc, cut, paste), and general scripting. " +
-    "Network access is disabled. Binary execution is not supported.",
+    "Network access is disabled. No external runtimes (node, python, etc.) are available.",
   parameters: Type.Object({
     command: Type.String({
       description:
@@ -44,7 +46,22 @@ export const bashTool = defineTool({
         output = "[no output]";
       }
 
-      return toolSuccess({ output: output.trim(), exitCode: result.exitCode });
+      output = output.trim();
+
+      const truncation = truncateTail(output);
+      let outputText = truncation.content;
+
+      if (truncation.truncated) {
+        const startLine = truncation.totalLines - truncation.outputLines + 1;
+        const endLine = truncation.totalLines;
+        if (truncation.truncatedBy === "lines") {
+          outputText += `\n\n[Showing last ${truncation.outputLines} of ${truncation.totalLines} lines. Output truncated.]`;
+        } else {
+          outputText += `\n\n[Showing lines ${startLine}-${endLine} of ${truncation.totalLines} (${formatSize(DEFAULT_MAX_BYTES)} limit). Output truncated.]`;
+        }
+      }
+
+      return toolSuccess({ output: outputText, exitCode: result.exitCode });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown error executing bash command";
       return toolError(message);
