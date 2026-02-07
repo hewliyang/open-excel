@@ -350,6 +350,7 @@ function ChatContent() {
 
   return (
     <div
+      role="application"
       className="flex flex-col h-full bg-(--chat-bg) relative"
       style={{ fontFamily: "var(--chat-font-mono)" }}
       onDragEnter={handleDragEnter}
