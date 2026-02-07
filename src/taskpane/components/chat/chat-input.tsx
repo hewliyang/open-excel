@@ -1,13 +1,6 @@
 import { Paperclip, Send, Square, X } from "lucide-react";
-import { type ChangeEvent, type KeyboardEvent, useCallback, useEffect, useRef, useState } from "react";
-import { saveVfsFiles } from "../../../lib/storage";
-import { deleteFile, listUploads, snapshotVfs, writeFile } from "../../../lib/vfs";
+import { type ChangeEvent, type KeyboardEvent, useCallback, useRef, useState } from "react";
 import { useChat } from "./chat-context";
-
-interface UploadedFile {
-  name: string;
-  size: number;
-}
 
 function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes}B`;
@@ -16,21 +9,12 @@ function formatFileSize(bytes: number): string {
 }
 
 export function ChatInput() {
-  const { sendMessage, state, abort } = useChat();
+  const { sendMessage, state, abort, processFiles, removeUpload } = useChat();
   const [input, setInput] = useState("");
-  const [uploads, setUploads] = useState<UploadedFile[]>([]);
-  const [isUploading, setIsUploading] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  // Reload uploads list when session changes (VFS is swapped per session)
-  const sessionId = state.currentSession?.id;
-  // biome-ignore lint/correctness/useExhaustiveDependencies: sessionId is an intentional trigger to reload uploads when switching sessions
-  useEffect(() => {
-    listUploads().then((files) => {
-      setUploads(files.map((name) => ({ name, size: 0 })));
-    });
-  }, [sessionId]);
+  const uploads = state.uploads;
+  const isUploading = state.isUploading;
 
   const handleSubmit = useCallback(async () => {
     const trimmed = input.trim();
@@ -54,53 +38,12 @@ export function ChatInput() {
     async (e: ChangeEvent<HTMLInputElement>) => {
       const files = e.target.files;
       if (!files || files.length === 0) return;
-
-      setIsUploading(true);
-      try {
-        for (const file of Array.from(files)) {
-          const buffer = await file.arrayBuffer();
-          const data = new Uint8Array(buffer);
-          await writeFile(file.name, data);
-          setUploads((prev) => {
-            const exists = prev.some((u) => u.name === file.name);
-            if (exists) {
-              return prev.map((u) => (u.name === file.name ? { name: file.name, size: file.size } : u));
-            }
-            return [...prev, { name: file.name, size: file.size }];
-          });
-        }
-        // Persist VFS to IndexedDB so uploads survive page reloads
-        if (state.currentSession?.id) {
-          const snapshot = await snapshotVfs();
-          await saveVfsFiles(state.currentSession.id, snapshot);
-        }
-      } catch (err) {
-        console.error("Failed to upload file:", err);
-      } finally {
-        setIsUploading(false);
-        if (fileInputRef.current) {
-          fileInputRef.current.value = "";
-        }
+      await processFiles(Array.from(files));
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
       }
     },
-    [state.currentSession?.id],
-  );
-
-  const handleRemoveFile = useCallback(
-    async (name: string) => {
-      try {
-        await deleteFile(name);
-        setUploads((prev) => prev.filter((u) => u.name !== name));
-        if (state.currentSession?.id) {
-          const snapshot = await snapshotVfs();
-          await saveVfsFiles(state.currentSession.id, snapshot);
-        }
-      } catch (err) {
-        console.error("Failed to delete file:", err);
-        setUploads((prev) => prev.filter((u) => u.name !== name));
-      }
-    },
-    [state.currentSession?.id],
+    [processFiles],
   );
 
   const openFilePicker = useCallback(() => {
@@ -126,7 +69,7 @@ export function ChatInput() {
               {file.size > 0 && <span className="text-(--chat-text-muted)">{formatFileSize(file.size)}</span>}
               <button
                 type="button"
-                onClick={() => handleRemoveFile(file.name)}
+                onClick={() => removeUpload(file.name)}
                 className="ml-0.5 text-(--chat-text-muted) hover:text-(--chat-error) transition-colors"
                 title="Remove from list"
               >

@@ -1,5 +1,17 @@
-import { Check, ChevronDown, Eye, EyeOff, MessageSquare, Moon, Plus, Settings, Sun, Trash2 } from "lucide-react";
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import {
+  Check,
+  ChevronDown,
+  Eye,
+  EyeOff,
+  MessageSquare,
+  Moon,
+  Plus,
+  Settings,
+  Sun,
+  Trash2,
+  Upload,
+} from "lucide-react";
+import { type DragEvent, type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { ChatProvider, useChat } from "./chat-context";
 import { ChatInput } from "./chat-input";
 import { MessageList } from "./message-list";
@@ -295,9 +307,56 @@ function ChatHeader({
 function ChatContent() {
   const [activeTab, setActiveTab] = useState<ChatTab>("chat");
   const { theme, toggle } = useTheme();
+  const { processFiles } = useChat();
+  const [isDragOver, setIsDragOver] = useState(false);
+  const dragCounterRef = useRef(0);
+
+  const handleDragEnter = useCallback((e: DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounterRef.current++;
+    if (e.dataTransfer.types.includes("Files")) {
+      setIsDragOver(true);
+    }
+  }, []);
+
+  const handleDragLeave = useCallback((e: DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounterRef.current--;
+    if (dragCounterRef.current === 0) {
+      setIsDragOver(false);
+    }
+  }, []);
+
+  const handleDragOver = useCallback((e: DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  }, []);
+
+  const handleDrop = useCallback(
+    (e: DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      dragCounterRef.current = 0;
+      setIsDragOver(false);
+      const files = Array.from(e.dataTransfer.files);
+      if (files.length > 0) {
+        processFiles(files);
+      }
+    },
+    [processFiles],
+  );
 
   return (
-    <div className="flex flex-col h-full bg-(--chat-bg)" style={{ fontFamily: "var(--chat-font-mono)" }}>
+    <div
+      className="flex flex-col h-full bg-(--chat-bg) relative"
+      style={{ fontFamily: "var(--chat-font-mono)" }}
+      onDragEnter={handleDragEnter}
+      onDragLeave={handleDragLeave}
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
+    >
       <ChatHeader activeTab={activeTab} onTabChange={setActiveTab} theme={theme} onThemeToggle={toggle} />
       {activeTab === "chat" ? (
         <>
@@ -307,6 +366,16 @@ function ChatContent() {
         </>
       ) : (
         <SettingsPanel />
+      )}
+
+      {/* Drag-and-drop overlay */}
+      {isDragOver && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-(--chat-bg)/80 backdrop-blur-sm">
+          <div className="flex flex-col items-center gap-3 p-8 border-2 border-dashed border-(--chat-accent) rounded-lg">
+            <Upload size={32} className="text-(--chat-accent)" />
+            <span className="text-sm text-(--chat-text-primary)">Drop files here</span>
+          </div>
+        </div>
       )}
     </div>
   );

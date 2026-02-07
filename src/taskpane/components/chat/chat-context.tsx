@@ -30,7 +30,7 @@ import {
   saveVfsFiles,
 } from "../../../lib/storage";
 import { EXCEL_TOOLS } from "../../../lib/tools";
-import { resetVfs, restoreVfs, snapshotVfs } from "../../../lib/vfs";
+import { deleteFile, listUploads, resetVfs, restoreVfs, snapshotVfs, writeFile } from "../../../lib/vfs";
 
 export type ToolCallStatus = "pending" | "running" | "complete" | "error";
 
@@ -107,6 +107,11 @@ function parseDirtyRanges(result: string | undefined): DirtyRange[] | null {
   return null;
 }
 
+export interface UploadedFile {
+  name: string;
+  size: number;
+}
+
 function applyProxyToModel(model: Model<any>, config: ProviderConfig): Model<any> {
   if (!config.useProxy || !config.proxyUrl || !model.baseUrl) return model;
   return {
@@ -124,6 +129,8 @@ interface ChatState {
   currentSession: ChatSession | null;
   sessions: ChatSession[];
   sheetNames: Record<number, string>;
+  uploads: UploadedFile[];
+  isUploading: boolean;
 }
 
 const INITIAL_STATS: SessionStats = {
@@ -149,6 +156,8 @@ interface ChatContextValue {
   deleteCurrentSession: () => Promise<void>;
   getSheetName: (sheetId: number) => string | undefined;
   toggleFollowMode: () => void;
+  processFiles: (files: File[]) => Promise<void>;
+  removeUpload: (name: string) => Promise<void>;
 }
 
 const ChatContext = createContext<ChatContextValue | null>(null);
@@ -237,6 +246,8 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       currentSession: null,
       sessions: [],
       sheetNames: {},
+      uploads: [],
+      isUploading: false,
     };
   });
 
@@ -595,7 +606,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         console.error,
       );
     }
-    setState((prev) => ({ ...prev, messages: [], error: null, sessionStats: INITIAL_STATS }));
+    setState((prev) => ({ ...prev, messages: [], error: null, sessionStats: INITIAL_STATS, uploads: [] }));
   }, [abort]);
 
   const refreshSessions = useCallback(async () => {
@@ -631,6 +642,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         currentSession: session,
         error: null,
         sessionStats: INITIAL_STATS,
+        uploads: [],
       }));
     } catch (err) {
       console.error("[Chat] Failed to create session:", err);
@@ -661,12 +673,14 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       }
       await restoreVfs(vfsFiles);
       currentSessionIdRef.current = session.id;
+      const uploadNames = await listUploads();
       setState((prev) => ({
         ...prev,
         messages: session.messages,
         currentSession: session,
         error: null,
         sessionStats: INITIAL_STATS,
+        uploads: uploadNames.map((name) => ({ name, size: 0 })),
       }));
     } catch (err) {
       console.error("[Chat] Failed to switch session:", err);
@@ -688,12 +702,14 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     const vfsFiles = await loadVfsFiles(session.id);
     await restoreVfs(vfsFiles);
     await refreshSessions();
+    const uploadNames = await listUploads();
     setState((prev) => ({
       ...prev,
       messages: session.messages,
       currentSession: session,
       error: null,
       sessionStats: INITIAL_STATS,
+      uploads: uploadNames.map((name) => ({ name, size: 0 })),
     }));
   }, [refreshSessions]);
 
@@ -745,6 +761,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         if (vfsFiles.length > 0) {
           await restoreVfs(vfsFiles);
         }
+        const uploadNames = await listUploads();
         console.log(
           "[Chat] Loaded session:",
           session.id,
@@ -759,6 +776,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
           messages: session.messages,
           currentSession: session,
           sessions,
+          uploads: uploadNames.map((name) => ({ name, size: 0 })),
         }));
       })
       .catch((err) => {
@@ -770,6 +788,50 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     (sheetId: number): string | undefined => state.sheetNames[sheetId],
     [state.sheetNames],
   );
+
+  const processFiles = useCallback(async (files: File[]) => {
+    if (files.length === 0) return;
+    setState((prev) => ({ ...prev, isUploading: true }));
+    try {
+      for (const file of files) {
+        const buffer = await file.arrayBuffer();
+        const data = new Uint8Array(buffer);
+        await writeFile(file.name, data);
+        setState((prev) => {
+          const exists = prev.uploads.some((u) => u.name === file.name);
+          if (exists) {
+            return {
+              ...prev,
+              uploads: prev.uploads.map((u) => (u.name === file.name ? { name: file.name, size: file.size } : u)),
+            };
+          }
+          return { ...prev, uploads: [...prev.uploads, { name: file.name, size: file.size }] };
+        });
+      }
+      if (currentSessionIdRef.current) {
+        const snapshot = await snapshotVfs();
+        await saveVfsFiles(currentSessionIdRef.current, snapshot);
+      }
+    } catch (err) {
+      console.error("Failed to upload file:", err);
+    } finally {
+      setState((prev) => ({ ...prev, isUploading: false }));
+    }
+  }, []);
+
+  const removeUpload = useCallback(async (name: string) => {
+    try {
+      await deleteFile(name);
+      setState((prev) => ({ ...prev, uploads: prev.uploads.filter((u) => u.name !== name) }));
+      if (currentSessionIdRef.current) {
+        const snapshot = await snapshotVfs();
+        await saveVfsFiles(currentSessionIdRef.current, snapshot);
+      }
+    } catch (err) {
+      console.error("Failed to delete file:", err);
+      setState((prev) => ({ ...prev, uploads: prev.uploads.filter((u) => u.name !== name) }));
+    }
+  }, []);
 
   const toggleFollowMode = useCallback(() => {
     setState((prev) => {
@@ -797,6 +859,8 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         deleteCurrentSession,
         getSheetName,
         toggleFollowMode,
+        processFiles,
+        removeUpload,
       }}
     >
       {children}
