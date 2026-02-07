@@ -28,6 +28,12 @@ export const readTool = defineTool({
         description: "Maximum number of lines to read",
       }),
     ),
+    explanation: Type.Optional(
+      Type.String({
+        description: "Brief explanation (max 50 chars)",
+        maxLength: 50,
+      }),
+    ),
   }),
   execute: async (_toolCallId, params) => {
     try {

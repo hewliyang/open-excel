@@ -20,6 +20,12 @@ export const bashTool = defineTool({
         "Supports pipes (|), redirections (>, >>), command chaining (&&, ||, ;), " +
         "variables, loops, conditionals, and functions.",
     }),
+    explanation: Type.Optional(
+      Type.String({
+        description: "Brief explanation (max 50 chars)",
+        maxLength: 50,
+      }),
+    ),
   }),
   execute: async (_toolCallId, params) => {
     try {
