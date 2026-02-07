@@ -730,6 +730,11 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     if (sessionLoadedRef.current) return;
     sessionLoadedRef.current = true;
 
+    const saved = loadSavedConfig();
+    if (saved?.provider && saved?.apiKey && saved?.model) {
+      applyConfig(saved);
+    }
+
     getOrCreateWorkbookId()
       .then(async (id) => {
         workbookIdRef.current = id;
@@ -759,14 +764,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       .catch((err) => {
         console.error("[Chat] Failed to load session:", err);
       });
-  }, []);
-
-  useEffect(() => {
-    const saved = loadSavedConfig();
-    if (saved?.provider && saved?.apiKey && saved?.model) {
-      setProviderConfig(saved);
-    }
-  }, [setProviderConfig]);
+  }, [applyConfig]);
 
   const getSheetName = useCallback(
     (sheetId: number): string | undefined => state.sheetNames[sheetId],

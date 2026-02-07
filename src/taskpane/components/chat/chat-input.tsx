@@ -1,7 +1,7 @@
 import { Paperclip, Send, Square, X } from "lucide-react";
 import { type ChangeEvent, type KeyboardEvent, useCallback, useEffect, useRef, useState } from "react";
 import { saveVfsFiles } from "../../../lib/storage";
-import { listUploads, snapshotVfs, writeFile } from "../../../lib/vfs";
+import { deleteFile, listUploads, snapshotVfs, writeFile } from "../../../lib/vfs";
 import { useChat } from "./chat-context";
 
 interface UploadedFile {
@@ -31,18 +31,6 @@ export function ChatInput() {
       setUploads(files.map((name) => ({ name, size: 0 })));
     });
   }, [sessionId]);
-
-  const adjustHeight = useCallback(() => {
-    const textarea = textareaRef.current;
-    if (textarea) {
-      textarea.style.height = "auto";
-      textarea.style.height = `${Math.min(textarea.scrollHeight, 120)}px`;
-    }
-  }, []);
-
-  useEffect(() => {
-    adjustHeight();
-  }, [adjustHeight]);
 
   const handleSubmit = useCallback(async () => {
     const trimmed = input.trim();
@@ -98,11 +86,22 @@ export function ChatInput() {
     [state.currentSession?.id],
   );
 
-  const handleRemoveFile = useCallback((name: string) => {
-    // Note: We don't actually delete from VFS, just hide from UI
-    // Files remain accessible to the agent
-    setUploads((prev) => prev.filter((u) => u.name !== name));
-  }, []);
+  const handleRemoveFile = useCallback(
+    async (name: string) => {
+      try {
+        await deleteFile(name);
+        setUploads((prev) => prev.filter((u) => u.name !== name));
+        if (state.currentSession?.id) {
+          const snapshot = await snapshotVfs();
+          await saveVfsFiles(state.currentSession.id, snapshot);
+        }
+      } catch (err) {
+        console.error("Failed to delete file:", err);
+        setUploads((prev) => prev.filter((u) => u.name !== name));
+      }
+    },
+    [state.currentSession?.id],
+  );
 
   const openFilePicker = useCallback(() => {
     fileInputRef.current?.click();

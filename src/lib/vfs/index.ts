@@ -142,6 +142,15 @@ export async function fileExists(path: string): Promise<boolean> {
 }
 
 /**
+ * Delete a file from the VFS
+ */
+export async function deleteFile(path: string): Promise<void> {
+  const vfs = getVfs();
+  const fullPath = path.startsWith("/") ? path : `/home/user/uploads/${path}`;
+  await vfs.rm(fullPath);
+}
+
+/**
  * List files in the VFS uploads directory
  */
 export async function listUploads(): Promise<string[]> {

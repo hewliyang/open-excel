@@ -1,5 +1,5 @@
 import { Check, Eye, EyeOff } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { type ThinkingLevel, useChat } from "./chat-context";
 
 const STORAGE_KEY = "openexcel-provider-config";
@@ -64,19 +64,44 @@ export function SettingsPanel() {
   // Preserve followMode from current state (managed via header toggle)
   const followMode = state.providerConfig?.followMode ?? true;
 
-  useEffect(() => {
-    if (provider && apiKey && model) {
-      saveConfig(provider, apiKey, model, useProxy, proxyUrl, thinking, followMode);
-      setProviderConfig({ provider, apiKey, model, useProxy, proxyUrl, thinking, followMode });
-    }
-  }, [provider, apiKey, model, useProxy, proxyUrl, thinking, followMode, setProviderConfig]);
+  const updateAndSync = useCallback(
+    (
+      updates: Partial<{
+        provider: string;
+        apiKey: string;
+        model: string;
+        useProxy: boolean;
+        proxyUrl: string;
+        thinking: ThinkingLevel;
+      }>,
+    ) => {
+      const p = updates.provider ?? provider;
+      const k = updates.apiKey ?? apiKey;
+      const m = updates.model ?? model;
+      const up = updates.useProxy ?? useProxy;
+      const pu = updates.proxyUrl ?? proxyUrl;
+      const t = updates.thinking ?? thinking;
+
+      if ("provider" in updates) setProvider(p);
+      if ("apiKey" in updates) setApiKey(k);
+      if ("model" in updates) setModel(m);
+      if ("useProxy" in updates) setUseProxy(up);
+      if ("proxyUrl" in updates) setProxyUrl(pu);
+      if ("thinking" in updates) setThinking(t);
+
+      if (p && k && m) {
+        saveConfig(p, k, m, up, pu, t, followMode);
+        setProviderConfig({ provider: p, apiKey: k, model: m, useProxy: up, proxyUrl: pu, thinking: t, followMode });
+      }
+    },
+    [provider, apiKey, model, useProxy, proxyUrl, thinking, followMode, setProviderConfig],
+  );
 
   const models = provider ? getModelsForProvider(provider) : [];
 
   const handleProviderChange = (newProvider: string) => {
-    setProvider(newProvider);
     const providerModels = newProvider ? getModelsForProvider(newProvider) : [];
-    setModel(providerModels[0]?.id || "");
+    updateAndSync({ provider: newProvider, model: providerModels[0]?.id || "" });
   };
 
   const isConfigured = state.providerConfig !== null;
@@ -115,7 +140,7 @@ export function SettingsPanel() {
             <span className="block text-xs text-(--chat-text-secondary) mb-1.5">Model</span>
             <select
               value={model}
-              onChange={(e) => setModel(e.target.value)}
+              onChange={(e) => updateAndSync({ model: e.target.value })}
               disabled={!provider}
               className="w-full bg-(--chat-input-bg) text-(--chat-text-primary)
                          text-sm px-3 py-2 border border-(--chat-border)
@@ -138,7 +163,7 @@ export function SettingsPanel() {
               <input
                 type={showKey ? "text" : "password"}
                 value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
+                onChange={(e) => updateAndSync({ apiKey: e.target.value })}
                 placeholder="Enter your API key"
                 className="w-full bg-(--chat-input-bg) text-(--chat-text-primary)
                            text-sm px-3 py-2 pr-10 border border-(--chat-border)
@@ -164,7 +189,7 @@ export function SettingsPanel() {
             </div>
             <button
               type="button"
-              onClick={() => setUseProxy(!useProxy)}
+              onClick={() => updateAndSync({ useProxy: !useProxy })}
               className={`
                 w-10 h-5 rounded-full transition-colors relative
                 ${useProxy ? "bg-(--chat-accent)" : "bg-(--chat-border)"}
@@ -185,7 +210,7 @@ export function SettingsPanel() {
               <input
                 type="text"
                 value={proxyUrl}
-                onChange={(e) => setProxyUrl(e.target.value)}
+                onChange={(e) => updateAndSync({ proxyUrl: e.target.value })}
                 placeholder="https://your-proxy.com/proxy"
                 className="w-full bg-(--chat-input-bg) text-(--chat-text-primary)
                            text-sm px-3 py-2 border border-(--chat-border)
@@ -206,7 +231,7 @@ export function SettingsPanel() {
                 <button
                   key={level.value}
                   type="button"
-                  onClick={() => setThinking(level.value)}
+                  onClick={() => updateAndSync({ thinking: level.value })}
                   className={`
                     flex-1 py-1.5 text-xs border transition-colors
                     ${

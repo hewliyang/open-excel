@@ -1,7 +1,7 @@
 import { code } from "@streamdown/code";
 import { Brain, CheckCircle2, ChevronDown, ChevronRight, Edit3, Loader2, Wrench, XCircle } from "lucide-react";
 import type { AnchorHTMLAttributes } from "react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Streamdown } from "streamdown";
 import { type DirtyRange, mergeRanges } from "../../../lib/dirty-tracker";
 import { navigateTo } from "../../../lib/excel/api";
@@ -352,18 +352,12 @@ export function MessageList() {
   const containerRef = useRef<HTMLDivElement>(null);
   const shouldAutoScroll = useRef(true);
 
-  useEffect(() => {
+  const handleScroll = useCallback(() => {
     const container = containerRef.current;
-    if (!container) return undefined;
-
-    const handleScroll = () => {
-      const { scrollTop, scrollHeight, clientHeight } = container;
-      const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
-      shouldAutoScroll.current = distanceFromBottom < 100;
-    };
-
-    container.addEventListener("scroll", handleScroll);
-    return () => container.removeEventListener("scroll", handleScroll);
+    if (!container) return;
+    const { scrollTop, scrollHeight, clientHeight } = container;
+    const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
+    shouldAutoScroll.current = distanceFromBottom < 100;
   }, []);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional - trigger scroll on message/streaming changes
@@ -396,6 +390,7 @@ export function MessageList() {
   return (
     <div
       ref={containerRef}
+      onScroll={handleScroll}
       className="flex-1 overflow-y-auto p-3 space-y-3"
       style={{
         scrollbarWidth: "thin",
