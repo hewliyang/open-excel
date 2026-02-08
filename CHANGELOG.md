@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-02-08
+
 ### Features
 
 - **Virtual filesystem & bash shell** — In-memory VFS powered by `just-bash/browser`. The agent can now read/write files and execute sandboxed bash commands (pipes, redirections, loops) with output truncation.
