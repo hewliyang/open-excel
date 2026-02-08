@@ -105,7 +105,7 @@ On first use, open the Settings tab in the add-in to configure:
 1. **Provider** — Select a built-in provider or "Custom Endpoint"
 2. **Authentication** — Enter an API key, or use OAuth for Anthropic/OpenAI
 3. **Model** — Choose from the provider's model list (or enter a model ID for custom endpoints)
-4. **CORS Proxy** — Required for some providers (Anthropic, etc.) when running in the browser
+4. **CORS Proxy** — Required for Anthropic (OAuth) and Z.ai when running in the browser. You can use the public proxy at `https://proxy.hewliyang.com` — it's [open source](https://github.com/hewliyang/cors-proxy) and doesn't log anything. Otherwise, host your own.
 5. **Thinking Level** — Control extended thinking (None/Low/Medium/High)
 
 Settings are stored locally in the browser's localStorage. Session data (messages, uploaded files, skills) is stored in IndexedDB.
