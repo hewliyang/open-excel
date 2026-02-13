@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+### Fixes
+
+- **search_data pagination with offset > 0** — Requests with `offset > 0` could return zero matches even when matches exist, and `hasMore`/`nextOffset` could be incorrect. Extracted pagination logic into a pure `SearchPageCollector` with separate match counting and page collection.
+
+### Chores
+
+- Added `pnpm test` step to CI workflow.
+- Removed redundant typecheck/lint from release workflow (already validated in CI).
+
 ## [0.2.1] - 2026-02-08
 
 ### Fixes
