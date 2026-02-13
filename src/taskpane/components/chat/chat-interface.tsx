@@ -1,6 +1,7 @@
 import {
   Check,
   ChevronDown,
+  Download,
   Eye,
   EyeOff,
   MessageSquare,
@@ -150,7 +151,14 @@ function TabButton({
 }
 
 function SessionDropdown({ onSelect }: { onSelect: () => void }) {
-  const { state, newSession, switchSession, deleteCurrentSession } = useChat();
+  const {
+    state,
+    newSession,
+    switchSession,
+    deleteCurrentSession,
+    exportCurrentSessionJsonl,
+    exportCurrentSessionHtml,
+  } = useChat();
   const [open, setOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const isStreaming = state.isStreaming;
@@ -260,6 +268,45 @@ function SessionDropdown({ onSelect }: { onSelect: () => void }) {
               );
             })}
           </div>
+
+          {state.currentSession && (
+            <>
+              <button
+                type="button"
+                disabled={isStreaming}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  exportCurrentSessionJsonl();
+                  setOpen(false);
+                }}
+                className={`w-full flex items-center gap-2 px-3 py-2 text-xs transition-colors border-t border-(--chat-border) ${
+                  isStreaming
+                    ? "text-(--chat-text-muted) cursor-not-allowed"
+                    : "text-(--chat-text-secondary) hover:bg-(--chat-bg-secondary)"
+                }`}
+              >
+                <Download size={14} />
+                Export JSONL
+              </button>
+              <button
+                type="button"
+                disabled={isStreaming}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  exportCurrentSessionHtml();
+                  setOpen(false);
+                }}
+                className={`w-full flex items-center gap-2 px-3 py-2 text-xs transition-colors ${
+                  isStreaming
+                    ? "text-(--chat-text-muted) cursor-not-allowed"
+                    : "text-(--chat-text-secondary) hover:bg-(--chat-bg-secondary)"
+                }`}
+              >
+                <Download size={14} />
+                Export HTML
+              </button>
+            </>
+          )}
 
           {state.sessions.length > 1 && state.currentSession && (
             <button

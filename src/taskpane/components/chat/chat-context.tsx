@@ -63,6 +63,11 @@ import {
   saveSession,
   saveVfsFiles,
 } from "../../../lib/storage";
+import {
+  downloadTextFile,
+  serializeSessionToHtml,
+  serializeSessionToJsonl,
+} from "../../../lib/session-export";
 import { EXCEL_TOOLS } from "../../../lib/tools";
 import {
   deleteFile,
@@ -132,6 +137,8 @@ interface ChatContextValue {
   removeUpload: (name: string) => Promise<void>;
   installSkill: (files: File[]) => Promise<void>;
   uninstallSkill: (name: string) => Promise<void>;
+  exportCurrentSessionJsonl: () => void;
+  exportCurrentSessionHtml: () => void;
 }
 
 const ChatContext = createContext<ChatContextValue | null>(null);
@@ -1029,6 +1036,34 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  const exportCurrentSessionJsonl = useCallback(() => {
+    const session = state.currentSession;
+    if (!session) return;
+
+    const messages = agentRef.current?.state.messages ?? session.agentMessages;
+    const jsonl = serializeSessionToJsonl(session, messages);
+    const safeName = session.name.replace(/[^a-zA-Z0-9-_]+/g, "-").slice(0, 60);
+    downloadTextFile(
+      `${safeName || "openexcel-session"}-${session.id}.jsonl`,
+      jsonl,
+      "application/x-ndjson",
+    );
+  }, [state.currentSession]);
+
+  const exportCurrentSessionHtml = useCallback(() => {
+    const session = state.currentSession;
+    if (!session) return;
+
+    const messages = agentRef.current?.state.messages ?? session.agentMessages;
+    const html = serializeSessionToHtml(session, messages);
+    const safeName = session.name.replace(/[^a-zA-Z0-9-_]+/g, "-").slice(0, 60);
+    downloadTextFile(
+      `${safeName || "openexcel-session"}-${session.id}.html`,
+      html,
+      "text/html;charset=utf-8",
+    );
+  }, [state.currentSession]);
+
   return (
     <ChatContext.Provider
       value={{
@@ -1048,6 +1083,8 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         removeUpload,
         installSkill,
         uninstallSkill,
+        exportCurrentSessionJsonl,
+        exportCurrentSessionHtml,
       }}
     >
       {children}
