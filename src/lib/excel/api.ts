@@ -1,7 +1,7 @@
 /* global Excel */
 
-import { getStableSheetId, preloadSheetIds } from "./sheet-id-map";
 import { createSearchPageCollector } from "./search-data-pagination";
+import { getStableSheetId, preloadSheetIds } from "./sheet-id-map";
 
 export interface CellData {
   value: string | number | boolean | null;
