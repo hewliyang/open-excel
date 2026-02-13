@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-02-13
+
 ### Fixes
 
 - **search_data pagination with offset > 0** — Requests with `offset > 0` could return zero matches even when matches exist, and `hasMore`/`nextOffset` could be incorrect. Extracted pagination logic into a pure `SearchPageCollector` with separate match counting and page collection.
