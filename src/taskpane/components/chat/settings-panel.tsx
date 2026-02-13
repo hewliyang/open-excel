@@ -1,5 +1,7 @@
 import {
   Check,
+  ChevronDown,
+  ChevronUp,
   ExternalLink,
   Eye,
   EyeOff,
@@ -26,6 +28,9 @@ import {
   THINKING_LEVELS,
   type ThinkingLevel,
 } from "../../../lib/provider-config";
+import { loadWebConfig, saveWebConfig } from "../../../lib/web/config";
+import { listFetchProviders } from "../../../lib/web/fetch";
+import { listSearchProviders } from "../../../lib/web/search";
 import { useChat } from "./chat-context";
 
 function SkillsSection() {
@@ -183,6 +188,22 @@ export function SettingsPanel() {
     () => saved?.authMethod || "apikey",
   );
 
+  const [savedWeb] = useState(loadWebConfig);
+  const [webSearchProvider, setWebSearchProvider] = useState(
+    () => savedWeb.searchProvider,
+  );
+  const [webFetchProvider, setWebFetchProvider] = useState(
+    () => savedWeb.fetchProvider,
+  );
+  const [braveApiKey, setBraveApiKey] = useState(
+    () => savedWeb.apiKeys.brave || "",
+  );
+  const [serperApiKey, setSerperApiKey] = useState(
+    () => savedWeb.apiKeys.serper || "",
+  );
+  const [exaApiKey, setExaApiKey] = useState(() => savedWeb.apiKeys.exa || "");
+  const [showAdvancedWebKeys, setShowAdvancedWebKeys] = useState(false);
+
   // OAuth flow state
   const [oauthFlow, setOauthFlow] = useState<OAuthFlowState>(() => {
     if (saved?.authMethod === "oauth") {
@@ -278,6 +299,52 @@ export function SettingsPanel() {
   const models = provider && !isCustom ? getModelsForProvider(provider) : [];
 
   const hasOAuth = provider in OAUTH_PROVIDERS;
+  const searchProviders = listSearchProviders();
+  const fetchProviders = listFetchProviders();
+  const needsBraveKey = webSearchProvider === "brave";
+  const needsSerperKey = webSearchProvider === "serper";
+  const needsExaKey = webSearchProvider === "exa" || webFetchProvider === "exa";
+
+  const updateWebSettings = useCallback(
+    (
+      updates: Partial<{
+        searchProvider: string;
+        fetchProvider: string;
+        braveApiKey: string;
+        serperApiKey: string;
+        exaApiKey: string;
+      }>,
+    ) => {
+      const nextSearchProvider = updates.searchProvider ?? webSearchProvider;
+      const nextFetchProvider = updates.fetchProvider ?? webFetchProvider;
+      const nextBraveApiKey = updates.braveApiKey ?? braveApiKey;
+      const nextSerperApiKey = updates.serperApiKey ?? serperApiKey;
+      const nextExaApiKey = updates.exaApiKey ?? exaApiKey;
+
+      if ("searchProvider" in updates) setWebSearchProvider(nextSearchProvider);
+      if ("fetchProvider" in updates) setWebFetchProvider(nextFetchProvider);
+      if ("braveApiKey" in updates) setBraveApiKey(nextBraveApiKey);
+      if ("serperApiKey" in updates) setSerperApiKey(nextSerperApiKey);
+      if ("exaApiKey" in updates) setExaApiKey(nextExaApiKey);
+
+      saveWebConfig({
+        searchProvider: nextSearchProvider,
+        fetchProvider: nextFetchProvider,
+        apiKeys: {
+          brave: nextBraveApiKey,
+          serper: nextSerperApiKey,
+          exa: nextExaApiKey,
+        },
+      });
+    },
+    [
+      webSearchProvider,
+      webFetchProvider,
+      braveApiKey,
+      serperApiKey,
+      exaApiKey,
+    ],
+  );
 
   const handleProviderChange = (newProvider: string) => {
     if (newProvider === "custom") {
@@ -752,6 +819,205 @@ export function SettingsPanel() {
             <p className="text-[10px] text-(--chat-text-muted) mt-1">
               Extended thinking for supported models
             </p>
+          </div>
+
+          <div className="border-t border-(--chat-border) pt-4 space-y-3">
+            <div className="text-[10px] uppercase tracking-widest text-(--chat-text-muted)">
+              web tools
+            </div>
+
+            <label className="block">
+              <span className="block text-xs text-(--chat-text-secondary) mb-1.5">
+                Default Search Provider
+              </span>
+              <select
+                value={webSearchProvider}
+                onChange={(e) =>
+                  updateWebSettings({ searchProvider: e.target.value })
+                }
+                className="w-full bg-(--chat-input-bg) text-(--chat-text-primary)
+                           text-sm px-3 py-2 border border-(--chat-border)
+                           focus:outline-none focus:border-(--chat-border-active)"
+                style={inputStyle}
+              >
+                {searchProviders.map((p) => (
+                  <option key={p} value={p}>
+                    {p}
+                  </option>
+                ))}
+              </select>
+              <p className="text-[10px] text-(--chat-text-muted) mt-1">
+                Used by web-search.
+              </p>
+            </label>
+
+            <label className="block">
+              <span className="block text-xs text-(--chat-text-secondary) mb-1.5">
+                Default Fetch Provider
+              </span>
+              <select
+                value={webFetchProvider}
+                onChange={(e) =>
+                  updateWebSettings({ fetchProvider: e.target.value })
+                }
+                className="w-full bg-(--chat-input-bg) text-(--chat-text-primary)
+                           text-sm px-3 py-2 border border-(--chat-border)
+                           focus:outline-none focus:border-(--chat-border-active)"
+                style={inputStyle}
+              >
+                {fetchProviders.map((p) => (
+                  <option key={p} value={p}>
+                    {p}
+                  </option>
+                ))}
+              </select>
+              <p className="text-[10px] text-(--chat-text-muted) mt-1">
+                Used by web-fetch.
+              </p>
+            </label>
+
+            {needsBraveKey && (
+              <label className="block">
+                <span className="block text-xs text-(--chat-text-secondary) mb-1.5">
+                  Brave API Key
+                </span>
+                <input
+                  type="password"
+                  value={braveApiKey}
+                  onChange={(e) =>
+                    updateWebSettings({ braveApiKey: e.target.value })
+                  }
+                  placeholder="Required for Brave search"
+                  className="w-full bg-(--chat-input-bg) text-(--chat-text-primary)
+                           text-sm px-3 py-2 border border-(--chat-border)
+                           placeholder:text-(--chat-text-muted)
+                           focus:outline-none focus:border-(--chat-border-active)"
+                  style={inputStyle}
+                />
+              </label>
+            )}
+
+            {needsSerperKey && (
+              <label className="block">
+                <span className="block text-xs text-(--chat-text-secondary) mb-1.5">
+                  Serper API Key
+                </span>
+                <input
+                  type="password"
+                  value={serperApiKey}
+                  onChange={(e) =>
+                    updateWebSettings({ serperApiKey: e.target.value })
+                  }
+                  placeholder="Required for Serper search"
+                  className="w-full bg-(--chat-input-bg) text-(--chat-text-primary)
+                           text-sm px-3 py-2 border border-(--chat-border)
+                           placeholder:text-(--chat-text-muted)
+                           focus:outline-none focus:border-(--chat-border-active)"
+                  style={inputStyle}
+                />
+              </label>
+            )}
+
+            {needsExaKey && (
+              <label className="block">
+                <span className="block text-xs text-(--chat-text-secondary) mb-1.5">
+                  Exa API Key
+                </span>
+                <input
+                  type="password"
+                  value={exaApiKey}
+                  onChange={(e) =>
+                    updateWebSettings({ exaApiKey: e.target.value })
+                  }
+                  placeholder="Required for Exa search/fetch"
+                  className="w-full bg-(--chat-input-bg) text-(--chat-text-primary)
+                           text-sm px-3 py-2 border border-(--chat-border)
+                           placeholder:text-(--chat-text-muted)
+                           focus:outline-none focus:border-(--chat-border-active)"
+                  style={inputStyle}
+                />
+              </label>
+            )}
+
+            <div className="pt-1">
+              <button
+                type="button"
+                onClick={() => setShowAdvancedWebKeys(!showAdvancedWebKeys)}
+                className="inline-flex items-center gap-1.5 text-xs text-(--chat-text-secondary) hover:text-(--chat-text-primary)"
+              >
+                {showAdvancedWebKeys ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                <span>
+                  {showAdvancedWebKeys ? "Hide" : "Show"} advanced saved API keys
+                </span>
+              </button>
+            </div>
+
+            {showAdvancedWebKeys && (
+              <div className="space-y-3 border border-(--chat-border) p-3 bg-(--chat-input-bg)">
+                {!needsBraveKey && (
+                  <label className="block">
+                    <span className="block text-xs text-(--chat-text-secondary) mb-1.5">
+                      Brave API Key
+                    </span>
+                    <input
+                      type="password"
+                      value={braveApiKey}
+                      onChange={(e) =>
+                        updateWebSettings({ braveApiKey: e.target.value })
+                      }
+                      placeholder="Optional"
+                      className="w-full bg-(--chat-bg) text-(--chat-text-primary)
+                           text-sm px-3 py-2 border border-(--chat-border)
+                           placeholder:text-(--chat-text-muted)
+                           focus:outline-none focus:border-(--chat-border-active)"
+                      style={inputStyle}
+                    />
+                  </label>
+                )}
+
+                {!needsSerperKey && (
+                  <label className="block">
+                    <span className="block text-xs text-(--chat-text-secondary) mb-1.5">
+                      Serper API Key
+                    </span>
+                    <input
+                      type="password"
+                      value={serperApiKey}
+                      onChange={(e) =>
+                        updateWebSettings({ serperApiKey: e.target.value })
+                      }
+                      placeholder="Optional"
+                      className="w-full bg-(--chat-bg) text-(--chat-text-primary)
+                           text-sm px-3 py-2 border border-(--chat-border)
+                           placeholder:text-(--chat-text-muted)
+                           focus:outline-none focus:border-(--chat-border-active)"
+                      style={inputStyle}
+                    />
+                  </label>
+                )}
+
+                {!needsExaKey && (
+                  <label className="block">
+                    <span className="block text-xs text-(--chat-text-secondary) mb-1.5">
+                      Exa API Key
+                    </span>
+                    <input
+                      type="password"
+                      value={exaApiKey}
+                      onChange={(e) =>
+                        updateWebSettings({ exaApiKey: e.target.value })
+                      }
+                      placeholder="Optional"
+                      className="w-full bg-(--chat-bg) text-(--chat-text-primary)
+                           text-sm px-3 py-2 border border-(--chat-border)
+                           placeholder:text-(--chat-text-muted)
+                           focus:outline-none focus:border-(--chat-border-active)"
+                      style={inputStyle}
+                    />
+                  </label>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>

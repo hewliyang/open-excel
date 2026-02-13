@@ -2,6 +2,10 @@ import type { Command, CustomCommand } from "just-bash/browser";
 import { defineCommand } from "just-bash/browser";
 import type { CellInput } from "../excel/api";
 import { getRangeAsCsv, getWorksheetById, setCellRange } from "../excel/api";
+import { loadSavedConfig } from "../provider-config";
+import { loadWebConfig } from "../web/config";
+import { fetchWeb } from "../web/fetch";
+import { searchWeb } from "../web/search";
 
 function columnIndexToLetter(index: number): string {
   let letter = "";
@@ -616,6 +620,147 @@ const xlsxToCsv: CustomCommand = {
     }),
 };
 
+const webSearchCmd: Command = defineCommand("web-search", async (args) => {
+  const flags: Record<string, string> = {};
+  const positional: string[] = [];
+  for (const arg of args) {
+    const match = arg.match(/^--(\w+)=(.+)$/);
+    if (match) {
+      flags[match[1]] = match[2];
+    } else if (arg === "--json") {
+      flags.json = "true";
+    } else {
+      positional.push(arg);
+    }
+  }
+
+  const query = positional.join(" ");
+  if (!query) {
+    return {
+      stdout: "",
+      stderr:
+        "Usage: web-search <query> [--max=N] [--region=REGION] [--time=d|w|m|y] [--page=N] [--json]\n  query    - Search query\n  --max    - Max results (default: 10)\n  --region - Region code, e.g. us-en, uk-en (default: us-en)\n  --time   - Time filter: d(ay), w(eek), m(onth), y(ear)\n  --page   - Page number (default: 1)\n  --json   - Output as JSON\n",
+      exitCode: 1,
+    };
+  }
+
+  try {
+    const webConfig = loadWebConfig();
+    const results = await searchWeb(
+      query,
+      {
+        maxResults: flags.max ? Number.parseInt(flags.max, 10) : 10,
+        region: flags.region,
+        timelimit: flags.time as "d" | "w" | "m" | "y" | undefined,
+        page: flags.page ? Number.parseInt(flags.page, 10) : undefined,
+      },
+      {
+        proxyUrl: getProxyUrl(),
+        apiKeys: webConfig.apiKeys,
+      },
+      webConfig.searchProvider,
+    );
+
+    if (results.length === 0) {
+      return { stdout: "No results found.", stderr: "", exitCode: 0 };
+    }
+
+    if (flags.json === "true") {
+      return {
+        stdout: JSON.stringify(results, null, 2),
+        stderr: "",
+        exitCode: 0,
+      };
+    }
+
+    const lines = results.map(
+      (r, i) => `${i + 1}. ${r.title}\n   ${r.href}\n   ${r.body}`,
+    );
+    return {
+      stdout: lines.join("\n\n"),
+      stderr: "",
+      exitCode: 0,
+    };
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    return { stdout: "", stderr: msg, exitCode: 1 };
+  }
+});
+
+function getProxyUrl(): string | undefined {
+  const config = loadSavedConfig();
+  return config?.useProxy && config?.proxyUrl ? config.proxyUrl : undefined;
+}
+
+const webFetchCmd: Command = defineCommand("web-fetch", async (args, ctx) => {
+  const url = args[0];
+  const outFile = args[1];
+  if (!url || !outFile) {
+    return {
+      stdout: "",
+      stderr:
+        "Usage: web-fetch <url> <outfile>\n  url      - URL to fetch\n  outfile  - Output file path\n\nFetches a URL and saves to a file.\n  - HTML pages: extracts readable content (Markdown)\n  - Binary files (PDF, DOCX, XLSX, etc.): downloads raw file\n  - Text/JSON/XML: saves as-is\nUses the configured fetch provider and CORS proxy from Settings.\n",
+      exitCode: 1,
+    };
+  }
+
+  try {
+    const webConfig = loadWebConfig();
+    const result = await fetchWeb(
+      url,
+      {
+        proxyUrl: getProxyUrl(),
+        apiKeys: webConfig.apiKeys,
+      },
+      webConfig.fetchProvider,
+    );
+
+    if (result.kind === "text") {
+      const header = [
+        result.title ? `Title: ${result.title}` : "",
+        ...Object.entries(result.metadata || {}).map(([k, v]) => `${k}: ${v}`),
+      ]
+        .filter(Boolean)
+        .join("\n");
+      const output = header ? `${header}\n\n${result.text}` : result.text;
+
+      await writeVfsOutput(ctx, outFile, output);
+      return {
+        stdout: `Fetched text → ${outFile} (${result.text.length} chars, ${result.contentType})`,
+        stderr: "",
+        exitCode: 0,
+      };
+    }
+
+    const resolvedPath = outFile.startsWith("/")
+      ? outFile
+      : `${ctx.cwd}/${outFile}`;
+    const dir = resolvedPath.substring(0, resolvedPath.lastIndexOf("/"));
+    if (dir && dir !== "/") {
+      try {
+        await ctx.fs.mkdir(dir, { recursive: true });
+      } catch {
+        // directory may already exist
+      }
+    }
+    await ctx.fs.writeFile(resolvedPath, result.data);
+
+    const size =
+      result.data.length >= 1024
+        ? `${Math.round(result.data.length / 1024)}KB`
+        : `${result.data.length}B`;
+
+    return {
+      stdout: `Downloaded → ${outFile} (${size}, ${result.contentType || "unknown type"})`,
+      stderr: "",
+      exitCode: 0,
+    };
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    return { stdout: "", stderr: msg, exitCode: 1 };
+  }
+});
+
 export function getCustomCommands(): CustomCommand[] {
   return [
     csvToSheet,
@@ -624,5 +769,7 @@ export function getCustomCommands(): CustomCommand[] {
     pdfToImages,
     docxToText,
     xlsxToCsv,
+    webSearchCmd,
+    webFetchCmd,
   ];
 }

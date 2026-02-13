@@ -154,6 +154,8 @@ FILES & SHELL:
   - pdf-to-images <file> <outdir> [--scale=N] [--pages=1,3,5-8] — Render PDF pages to PNG images. Use for scanned PDFs where text extraction won't work. Then use read to visually inspect the images.
   - docx-to-text <file> <outfile> — Extract text from DOCX to file.
   - xlsx-to-csv <file> <outfile> [sheet] — Convert XLSX/XLS/ODS sheet to CSV. Sheet by name or 0-based index.
+  - web-search <query> [--max=N] [--region=REGION] [--time=d|w|m|y] [--page=N] [--json] — Search the web. Returns title, URL, and snippet for each result.
+  - web-fetch <url> <outfile> — Fetch a web page and extract its readable content to a file. Use head/grep/tail to read selectively.
 
   Examples:
     csv-to-sheet uploads/data.csv 1 A1       # import CSV to sheet 1
@@ -161,6 +163,9 @@ FILES & SHELL:
     sheet-to-csv 1 A1:D100 export.csv         # export specific range to file
     sheet-to-csv 1 | sort -t, -k3 -rn | head -20   # pipe entire sheet to analysis
     cut -d, -f1,3 uploads/data.csv > filtered.csv && csv-to-sheet filtered.csv 1 A1  # filter then import
+    web-search "S&P 500 companies list"       # search the web
+    web-search "USD EUR exchange rate" --max=5 --time=w  # recent results only
+    web-fetch https://example.com/article page.txt && grep -i "revenue" page.txt  # fetch then grep
 
   IMPORTANT: When importing file data into the spreadsheet, ALWAYS prefer csv-to-sheet over reading
   the file content and calling set_cell_range. This avoids wasting tokens on data that doesn't need

@@ -14,12 +14,18 @@ importers:
       '@mariozechner/pi-ai':
         specifier: ^0.52.6
         version: 0.52.7(ws@8.19.0)(zod@3.25.76)
+      '@mozilla/readability':
+        specifier: ^0.6.0
+        version: 0.6.0
       '@sinclair/typebox':
         specifier: ^0.34.48
         version: 0.34.48
       '@streamdown/code':
         specifier: ^1.0.1
         version: 1.0.1(react@18.3.1)
+      '@types/turndown':
+        specifier: ^5.0.6
+        version: 5.0.6
       idb:
         specifier: ^8.0.3
         version: 8.0.3
@@ -47,6 +53,9 @@ importers:
       streamdown:
         specifier: ^2.1.0
         version: 2.1.0(react@18.3.1)
+      turndown:
+        specifier: ^7.2.2
+        version: 7.2.2
       xlsx:
         specifier: ^0.18.5
         version: 0.18.5
@@ -1042,6 +1051,10 @@ packages:
     resolution: {integrity: sha512-mQ2s0pYYiav+tzCDR05Zptem8Ey2v8s11lri5RKGhTtL4COVCvVCk5vtyRYNT+9L8qSfyOqqefF9UtnW8mC5jA==}
     engines: {node: '>= 20.19.0'}
 
+  '@mozilla/readability@0.6.0':
+    resolution: {integrity: sha512-juG5VWh4qAivzTAeMzvY9xs9HY5rAcr2E4I7tiSSCokRFi7XIZCAu92ZkSTsIj1OPceCifL3cpfteP3pDT9/QQ==}
+    engines: {node: '>=14.0.0'}
+
   '@napi-rs/canvas-android-arm64@0.1.90':
     resolution: {integrity: sha512-3JBULVF+BIgr7yy7Rf8UjfbkfFx4CtXrkJFD1MDgKJ83b56o0U9ciT8ZGTCNmwWkzu8RbNKlyqPP3KYRG88y7Q==}
     engines: {node: '>= 10'}
@@ -1697,6 +1710,9 @@ packages:
 
   '@types/react@18.3.27':
     resolution: {integrity: sha512-cisd7gxkzjBKU2GgdYrTdtQx1SORymWyaAFhaxQPK9bYO9ot3Y5OikQRvY0VYQtvwjeQnizCINJAenh/V7MK2w==}
+
+  '@types/turndown@5.0.6':
+    resolution: {integrity: sha512-ru00MoyeeouE5BX4gRL+6m/BsDfbRayOskWqUvh7CLGW+UXxHQItqALa38kKnOiZPqJrtzJUgAC2+F0rL1S4Pg==}
 
   '@types/unist@2.0.11':
     resolution: {integrity: sha512-CmBKiL6NNo/OqgmMn95Fk9Whlp2mtvIv+KNpQKN2F4SjvrEesubTRWGYSg+BnWZOnlCaSTU1sMpsBOzgbYhnsA==}
@@ -6809,6 +6825,8 @@ snapshots:
       node-addon-api: 8.5.0
       prebuild-install: 7.1.3
 
+  '@mozilla/readability@0.6.0': {}
+
   '@napi-rs/canvas-android-arm64@0.1.90':
     optional: true
 
@@ -7504,6 +7522,8 @@ snapshots:
     dependencies:
       '@types/prop-types': 15.7.15
       csstype: 3.2.3
+
+  '@types/turndown@5.0.6': {}
 
   '@types/unist@2.0.11': {}
 
