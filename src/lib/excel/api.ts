@@ -1,6 +1,7 @@
 /* global Excel */
 
 import { getStableSheetId, preloadSheetIds } from "./sheet-id-map";
+import { createSearchPageCollector } from "./search-data-pagination";
 
 export interface CellData {
   value: string | number | boolean | null;
@@ -360,7 +361,13 @@ export async function searchData(
 
     const stableIdMap = await preloadSheetIds(sheets.items);
 
-    const matches: SearchMatch[] = [];
+    const pageCollector = createSearchPageCollector<SearchMatch>(
+      offset,
+      maxResults,
+    );
+
+    let stopSearch = false;
+
     const sheetsToSearch = sheetId
       ? ([await getWorksheetById(context, sheetId)].filter(
           Boolean,
@@ -372,6 +379,8 @@ export async function searchData(
       : null;
 
     for (const sheet of sheetsToSearch) {
+      if (stopSearch) break;
+
       sheet.load("name,id");
       const searchRange = range
         ? sheet.getRange(range)
@@ -385,10 +394,8 @@ export async function searchData(
       const stableSheetId =
         stableIdMap.get(sheet.id) || (await getStableSheetId(sheet.id));
 
-      for (let r = 0; r < searchRange.rowCount; r++) {
+      for (let r = 0; r < searchRange.rowCount && !stopSearch; r++) {
         for (let c = 0; c < searchRange.columnCount; c++) {
-          if (matches.length >= offset + maxResults) break;
-
           const value = searchRange.values[r][c];
           const formula = searchRange.formulas[r][c];
           const searchTarget =
@@ -409,35 +416,41 @@ export async function searchData(
               : compareVal.includes(compareTerm);
           }
 
-          if (isMatch && matches.length >= offset) {
-            matches.push({
-              sheetName: sheet.name,
-              sheetId: stableSheetId,
-              a1: cellAddress(startRow + r, startCol + c),
-              value: value as string | number | boolean,
-              formula:
-                typeof formula === "string" && formula.startsWith("=")
-                  ? formula
-                  : null,
-              row: startRow + r + 1,
-              column: startCol + c + 1,
-            });
+          if (!isMatch) continue;
+
+          const shouldStop = pageCollector.add({
+            sheetName: sheet.name,
+            sheetId: stableSheetId,
+            a1: cellAddress(startRow + r, startCol + c),
+            value: value as string | number | boolean,
+            formula:
+              typeof formula === "string" && formula.startsWith("=")
+                ? formula
+                : null,
+            row: startRow + r + 1,
+            column: startCol + c + 1,
+          });
+
+          if (shouldStop) {
+            stopSearch = true;
+            break;
           }
         }
       }
     }
 
-    const returned = matches.slice(0, maxResults);
+    const page = pageCollector.toPage();
+
     return {
       success: true,
-      matches: returned,
-      totalFound: matches.length + offset,
-      returned: returned.length,
-      offset,
-      hasMore: matches.length > maxResults,
+      matches: pageCollector.matches,
+      totalFound: page.totalFound,
+      returned: page.returned,
+      offset: page.offset,
+      hasMore: page.hasMore,
       searchTerm,
       searchScope: sheetId ? `Sheet ${sheetId}` : "All sheets",
-      nextOffset: matches.length > maxResults ? offset + maxResults : null,
+      nextOffset: page.nextOffset,
     };
   });
 }
