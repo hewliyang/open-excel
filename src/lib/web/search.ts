@@ -165,7 +165,9 @@ const serperProvider: SearchProvider = {
     });
 
     if (!resp.ok) {
-      throw new Error(`Serper search failed: ${resp.status} ${resp.statusText}`);
+      throw new Error(
+        `Serper search failed: ${resp.status} ${resp.statusText}`,
+      );
     }
 
     const data = (await resp.json()) as {

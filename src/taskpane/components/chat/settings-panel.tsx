@@ -337,13 +337,7 @@ export function SettingsPanel() {
         },
       });
     },
-    [
-      webSearchProvider,
-      webFetchProvider,
-      braveApiKey,
-      serperApiKey,
-      exaApiKey,
-    ],
+    [webSearchProvider, webFetchProvider, braveApiKey, serperApiKey, exaApiKey],
   );
 
   const handleProviderChange = (newProvider: string) => {
@@ -945,9 +939,14 @@ export function SettingsPanel() {
                 onClick={() => setShowAdvancedWebKeys(!showAdvancedWebKeys)}
                 className="inline-flex items-center gap-1.5 text-xs text-(--chat-text-secondary) hover:text-(--chat-text-primary)"
               >
-                {showAdvancedWebKeys ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                {showAdvancedWebKeys ? (
+                  <ChevronUp size={12} />
+                ) : (
+                  <ChevronDown size={12} />
+                )}
                 <span>
-                  {showAdvancedWebKeys ? "Hide" : "Show"} advanced saved API keys
+                  {showAdvancedWebKeys ? "Hide" : "Show"} advanced saved API
+                  keys
                 </span>
               </button>
             </div>
