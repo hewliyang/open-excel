@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+## [0.2.3] - 2026-02-15
+
+### Features
+
+- **Web search** — New `web-search` CLI command lets the agent search the web with pagination, region, and time filters. Supports multiple search providers: DuckDuckGo (free, no key), Brave, Serper, and Exa (API key required).
+- **Web fetch** — New `web-fetch` CLI command fetches a URL and saves readable content to a file. HTML pages are converted to Markdown via Readability + Turndown. Binary files (PDF, DOCX, etc.) are downloaded raw. Supports basic fetch and Exa as providers.
+- **Web tools settings** — New "Web Tools" section in the settings panel to configure search/fetch providers and manage API keys (Brave, Serper, Exa) with an advanced keys drawer.
+
+### Improvements
+
+- **Chat input redesign** — Input field now auto-resizes (up to 2 rows), with paperclip and send buttons moved inside the input border for a cleaner look.
+- **Error boundary** — Added a top-level React error boundary that catches unhandled render errors and offers "Try again" / "Reload add-in" actions instead of a blank screen.
+
 ## [0.2.2] - 2026-02-13
 
 ### Fixes
