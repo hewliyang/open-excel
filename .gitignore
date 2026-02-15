@@ -24,3 +24,4 @@ npm-debug.log*
 *.crt
 *.key
 *.pem
+headless-test/

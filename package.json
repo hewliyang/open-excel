@@ -32,8 +32,10 @@
   "dependencies": {
     "@mariozechner/pi-agent-core": "^0.52.6",
     "@mariozechner/pi-ai": "^0.52.6",
+    "@mozilla/readability": "^0.6.0",
     "@sinclair/typebox": "^0.34.48",
     "@streamdown/code": "^1.0.1",
+    "@types/turndown": "^5.0.6",
     "idb": "^8.0.3",
     "just-bash": "^2.7.0",
     "lucide-react": "^0.563.0",
@@ -43,6 +45,7 @@
     "react-dom": "^18.2.0",
     "ses": "^1.14.0",
     "streamdown": "^2.1.0",
+    "turndown": "^7.2.2",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
