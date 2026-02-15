@@ -3,6 +3,7 @@ import {
   type ChangeEvent,
   type KeyboardEvent,
   useCallback,
+  useEffect,
   useRef,
   useState,
 } from "react";
@@ -14,6 +15,10 @@ function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
 }
 
+const LINE_HEIGHT = 20;
+const MIN_ROWS = 1;
+const MAX_ROWS = 2;
+
 export function ChatInput() {
   const { sendMessage, state, abort, processFiles, removeUpload } = useChat();
   const [input, setInput] = useState("");
@@ -21,6 +26,21 @@ export function ChatInput() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const uploads = state.uploads;
   const isUploading = state.isUploading;
+
+  const autoResize = useCallback(() => {
+    const ta = textareaRef.current;
+    if (!ta) return;
+    ta.style.height = "auto";
+    const min = LINE_HEIGHT * MIN_ROWS;
+    const max = LINE_HEIGHT * MAX_ROWS;
+    const clamped = Math.max(min, Math.min(ta.scrollHeight, max));
+    ta.style.height = `${clamped}px`;
+    ta.style.overflowY = ta.scrollHeight > max ? "auto" : "hidden";
+  }, []);
+
+  useEffect(() => {
+    autoResize();
+  }, [input, autoResize]);
 
   const handleSubmit = useCallback(async () => {
     const trimmed = input.trim();
@@ -61,7 +81,7 @@ export function ChatInput() {
 
   return (
     <div
-      className="border-t border-(--chat-border) p-3 bg-(--chat-bg)"
+      className="border-t border-(--chat-border) px-3 py-2 bg-(--chat-bg)"
       style={{ fontFamily: "var(--chat-font-mono)" }}
     >
       {state.error && (
@@ -100,41 +120,21 @@ export function ChatInput() {
         </div>
       )}
 
-      <div className="flex items-end gap-2">
-        {/* Hidden file input */}
-        <input
-          ref={fileInputRef}
-          type="file"
-          multiple
-          onChange={handleFileSelect}
-          className="hidden"
-          accept="image/*,.txt,.csv,.json,.xml,.md,.html,.css,.js,.ts,.py,.sh"
-        />
+      {/* Hidden file input */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        onChange={handleFileSelect}
+        className="hidden"
+        accept="image/*,.txt,.csv,.json,.xml,.md,.html,.css,.js,.ts,.py,.sh"
+      />
 
-        {/* Upload button */}
-        <button
-          type="button"
-          onClick={openFilePicker}
-          disabled={isUploading || state.isStreaming}
-          className={`
-            flex items-center justify-center
-            border border-(--chat-border) bg-(--chat-bg-secondary)
-            text-(--chat-text-secondary)
-            hover:bg-(--chat-bg-tertiary) hover:text-(--chat-text-primary)
-            hover:border-(--chat-border-active)
-            disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-(--chat-bg-secondary)
-            transition-colors
-          `}
-          style={{
-            borderRadius: "var(--chat-radius)",
-            minHeight: "32px",
-            width: "32px",
-          }}
-          title="Upload files"
-        >
-          <Paperclip size={14} className={isUploading ? "animate-pulse" : ""} />
-        </button>
-
+      {/* Input container — border on wrapper, textarea + action row inside */}
+      <div
+        className="bg-(--chat-input-bg) border border-(--chat-border) focus-within:border-(--chat-border-active) transition-colors"
+        style={{ borderRadius: "var(--chat-radius)" }}
+      >
         <textarea
           ref={textareaRef}
           value={input}
@@ -146,62 +146,62 @@ export function ChatInput() {
               : "Configure API key in settings"
           }
           disabled={!state.providerConfig}
-          rows={1}
           className={`
-            flex-1 resize-none bg-(--chat-input-bg) text-(--chat-text-primary)
-            text-sm px-3 py-2 border border-(--chat-border)
+            w-full resize-none bg-transparent text-(--chat-text-primary)
+            text-sm px-3 pt-2 pb-0 border-none outline-none
             placeholder:text-(--chat-text-muted)
-            focus:outline-none focus:border-(--chat-border-active)
             disabled:opacity-50 disabled:cursor-not-allowed
           `}
           style={{
-            borderRadius: "var(--chat-radius)",
             fontFamily: "var(--chat-font-mono)",
-            minHeight: "32px",
+            lineHeight: `${LINE_HEIGHT}px`,
+            height: `${LINE_HEIGHT * MIN_ROWS}px`,
           }}
         />
-        {state.isStreaming ? (
+
+        {/* Action row inside the border */}
+        <div className="flex items-center justify-between px-1.5 py-1">
           <button
             type="button"
-            onClick={abort}
-            className={`
-              flex items-center justify-center
-              border border-(--chat-error) bg-(--chat-bg-secondary)
-              text-(--chat-error)
-              hover:bg-(--chat-error) hover:text-(--chat-bg)
-              transition-colors
-            `}
-            style={{
-              borderRadius: "var(--chat-radius)",
-              minHeight: "32px",
-              width: "32px",
-            }}
+            onClick={openFilePicker}
+            disabled={isUploading || state.isStreaming}
+            className="flex items-center justify-center w-6 h-5
+                       text-(--chat-text-muted) hover:text-(--chat-text-primary)
+                       disabled:opacity-30 disabled:cursor-not-allowed
+                       transition-colors"
+            title="Upload files"
           >
-            <Square size={14} />
+            <Paperclip
+              size={13}
+              className={isUploading ? "animate-pulse" : ""}
+            />
           </button>
-        ) : (
-          <button
-            type="button"
-            onClick={handleSubmit}
-            disabled={!state.providerConfig || !input.trim()}
-            className={`
-              flex items-center justify-center
-              border border-(--chat-border) bg-(--chat-bg-secondary)
-              text-(--chat-text-secondary)
-              hover:bg-(--chat-bg-tertiary) hover:text-(--chat-text-primary)
-              hover:border-(--chat-border-active)
-              disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-(--chat-bg-secondary)
-              transition-colors
-            `}
-            style={{
-              borderRadius: "var(--chat-radius)",
-              minHeight: "32px",
-              width: "32px",
-            }}
-          >
-            <Send size={14} />
-          </button>
-        )}
+
+          {state.isStreaming ? (
+            <button
+              type="button"
+              onClick={abort}
+              className="flex items-center justify-center w-6 h-5
+                         text-(--chat-error) hover:text-(--chat-bg) hover:bg-(--chat-error)
+                         transition-colors"
+              style={{ borderRadius: "var(--chat-radius)" }}
+            >
+              <Square size={13} />
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={handleSubmit}
+              disabled={!state.providerConfig || !input.trim()}
+              className="flex items-center justify-center w-6 h-5
+                         text-(--chat-text-muted) hover:text-(--chat-text-primary)
+                         disabled:opacity-30 disabled:cursor-not-allowed
+                         transition-colors"
+            >
+              <Send size={13} />
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );

@@ -835,8 +835,8 @@ export function SettingsPanel() {
                 style={inputStyle}
               >
                 {searchProviders.map((p) => (
-                  <option key={p} value={p}>
-                    {p}
+                  <option key={p.id} value={p.id}>
+                    {p.label}
                   </option>
                 ))}
               </select>

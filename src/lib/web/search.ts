@@ -236,8 +236,15 @@ const PROVIDERS: Record<string, SearchProvider> = {
   exa: exaProvider,
 };
 
-export function listSearchProviders(): string[] {
-  return Object.keys(PROVIDERS);
+const PROVIDER_LABELS: Record<string, string> = {
+  ddgs: "ddgs (free, easily rate limited)",
+};
+
+export function listSearchProviders(): { id: string; label: string }[] {
+  return Object.keys(PROVIDERS).map((id) => ({
+    id,
+    label: PROVIDER_LABELS[id] ?? id,
+  }));
 }
 
 export function getSearchProvider(providerId?: string): SearchProvider {
