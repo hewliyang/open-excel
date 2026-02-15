@@ -39,8 +39,18 @@ export function ChatInput() {
   }, []);
 
   useEffect(() => {
-    autoResize();
+    if (!input) {
+      autoResize();
+    }
   }, [input, autoResize]);
+
+  const handleInputChange = useCallback(
+    (e: ChangeEvent<HTMLTextAreaElement>) => {
+      setInput(e.target.value);
+      autoResize();
+    },
+    [autoResize],
+  );
 
   const handleSubmit = useCallback(async () => {
     const trimmed = input.trim();
@@ -138,7 +148,7 @@ export function ChatInput() {
         <textarea
           ref={textareaRef}
           value={input}
-          onChange={(e) => setInput(e.target.value)}
+          onChange={handleInputChange}
           onKeyDown={handleKeyDown}
           placeholder={
             state.providerConfig

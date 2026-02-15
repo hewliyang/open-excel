@@ -20,6 +20,33 @@ function getApiKey(
   return context.apiKeys?.[providerId];
 }
 
+async function fetchWithProxy(
+  url: string,
+  context: WebContext,
+  init?: RequestInit,
+): Promise<Response> {
+  if (context.proxyUrl) {
+    try {
+      return await fetch(
+        `${context.proxyUrl}/?url=${encodeURIComponent(url)}`,
+        init,
+      );
+    } catch (err) {
+      throw new Error(
+        `CORS proxy search failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  }
+
+  try {
+    return await fetch(url, init);
+  } catch {
+    throw new Error(
+      "Search blocked by CORS and no CORS proxy is configured. Enable the CORS proxy in Settings.",
+    );
+  }
+}
+
 const ddgsProvider: SearchProvider = {
   id: "ddgs",
   async search(query, options, context) {
@@ -30,11 +57,8 @@ const ddgsProvider: SearchProvider = {
     if (timelimit) body.set("df", timelimit);
 
     const target = "https://html.duckduckgo.com/html/";
-    const fetchUrl = context.proxyUrl
-      ? `${context.proxyUrl}/?url=${encodeURIComponent(target)}`
-      : target;
 
-    const resp = await fetch(fetchUrl, {
+    const resp = await fetchWithProxy(target, context, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: body.toString(),
@@ -89,11 +113,7 @@ const braveProvider: SearchProvider = {
     url.searchParams.set("offset", String(offset));
     url.searchParams.set("country", country);
 
-    const target = context.proxyUrl
-      ? `${context.proxyUrl}/?url=${encodeURIComponent(url.toString())}`
-      : url.toString();
-
-    const resp = await fetch(target, {
+    const resp = await fetchWithProxy(url.toString(), context, {
       headers: {
         Accept: "application/json",
         "X-Subscription-Token": apiKey,
@@ -151,11 +171,8 @@ const serperProvider: SearchProvider = {
     if (options.timelimit) body.tbs = `qdr:${options.timelimit}`;
 
     const endpoint = "https://google.serper.dev/search";
-    const target = context.proxyUrl
-      ? `${context.proxyUrl}/?url=${encodeURIComponent(endpoint)}`
-      : endpoint;
 
-    const resp = await fetch(target, {
+    const resp = await fetchWithProxy(endpoint, context, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -200,11 +217,8 @@ const exaProvider: SearchProvider = {
     };
 
     const targetUrl = "https://api.exa.ai/search";
-    const target = context.proxyUrl
-      ? `${context.proxyUrl}/?url=${encodeURIComponent(targetUrl)}`
-      : targetUrl;
 
-    const resp = await fetch(target, {
+    const resp = await fetchWithProxy(targetUrl, context, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
