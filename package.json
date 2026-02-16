@@ -21,12 +21,12 @@
     "format": "biome format --write src/",
     "test": "vitest run",
     "typecheck": "tsc --noEmit --skipLibCheck",
-    "check": "tsc --noEmit --skipLibCheck && biome check src/",
+    "check": "tsc --noEmit --skipLibCheck && biome check src/ && pnpm validate",
     "signin": "office-addin-dev-settings m365-account login",
     "signout": "office-addin-dev-settings m365-account logout",
     "start": "office-addin-debugging start manifest.xml",
     "stop": "office-addin-debugging stop manifest.xml",
-    "validate": "office-addin-manifest validate manifest.xml",
+    "validate": "office-addin-manifest validate manifest.xml && office-addin-manifest validate manifest.prod.xml",
     "watch": "vite build --mode development --watch"
   },
   "dependencies": {
