@@ -35,5 +35,8 @@ jobs:
       - name: Lint
         run: pnpm lint
 
+      - name: Validate manifests
+        run: pnpm validate
+
       - name: Build
         run: pnpm build
