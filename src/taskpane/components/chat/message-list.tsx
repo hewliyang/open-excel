@@ -227,6 +227,18 @@ function ToolCallBlock({ part }: { part: ToolCallPart }) {
               >{`\`\`\`json\n${JSON.stringify(part.args, null, 2)}\n\`\`\``}</Streamdown>
             </div>
           </div>
+          {part.images && part.images.length > 0 && (
+            <div className="px-2 py-1.5 border-t border-(--chat-border)">
+              {part.images.map((img, imgIdx) => (
+                <img
+                  key={`${part.id}-img-${imgIdx}`}
+                  src={`data:${img.mimeType};base64,${img.data}`}
+                  alt={`Tool result image ${imgIdx + 1}`}
+                  className="max-w-full rounded-sm border border-(--chat-border)"
+                />
+              ))}
+            </div>
+          )}
           {part.result && (
             <div className="px-2 py-1.5 text-xs border-t border-(--chat-border)">
               <div className="text-(--chat-text-muted) text-[10px] uppercase mb-1">

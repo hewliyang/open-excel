@@ -154,6 +154,7 @@ FILES & SHELL:
   - pdf-to-images <file> <outdir> [--scale=N] [--pages=1,3,5-8] — Render PDF pages to PNG images. Use for scanned PDFs where text extraction won't work. Then use read to visually inspect the images.
   - docx-to-text <file> <outfile> — Extract text from DOCX to file.
   - xlsx-to-csv <file> <outfile> [sheet] — Convert XLSX/XLS/ODS sheet to CSV. Sheet by name or 0-based index.
+  - image-to-sheet <file> <width> <height> <sheetId> [startCell] [--cell-size=N] — Render an image as pixel art in Excel. Downsamples to target size and paints cell backgrounds. Cell size in points (default: 3). Max 500×500. Example: image-to-sheet uploads/logo.png 64 64 1 A1 --cell-size=4
   - web-search <query> [--max=N] [--region=REGION] [--time=d|w|m|y] [--page=N] [--json] — Search the web. Returns title, URL, and snippet for each result.
   - web-fetch <url> <outfile> — Fetch a web page and extract its readable content to a file. Use head/grep/tail to read selectively.
 
@@ -397,6 +398,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       }
       case "tool_execution_end": {
         let resultText: string;
+        let resultImages: { data: string; mimeType: string }[] | undefined;
         if (typeof event.result === "string") {
           resultText = event.result;
         } else if (
@@ -407,6 +409,13 @@ export function ChatProvider({ children }: { children: ReactNode }) {
             .filter((c: { type: string }) => c.type === "text")
             .map((c: { text: string }) => c.text)
             .join("\n");
+          const images = event.result.content
+            .filter((c: { type: string }) => c.type === "image")
+            .map((c: { data: string; mimeType: string }) => ({
+              data: c.data,
+              mimeType: c.mimeType,
+            }));
+          if (images.length > 0) resultImages = images;
         } else {
           resultText = JSON.stringify(event.result, null, 2);
         }
@@ -443,6 +452,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
                   ...part,
                   status: event.isError ? "error" : "complete",
                   result: resultText,
+                  images: resultImages,
                 };
                 messages[i] = { ...msg, parts };
               }

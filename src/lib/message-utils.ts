@@ -1,6 +1,7 @@
 import type { AgentMessage } from "@mariozechner/pi-agent-core";
 import type {
   AssistantMessage,
+  ImageContent,
   TextContent,
   ToolResultMessage,
   UserMessage,
@@ -18,6 +19,7 @@ export type MessagePart =
       args: Record<string, unknown>;
       status: ToolCallStatus;
       result?: string;
+      images?: { data: string; mimeType: string }[];
     };
 
 export interface ChatMessage {
@@ -127,10 +129,14 @@ export function agentMessagesToChatMessages(
               .filter((c): c is TextContent => c.type === "text")
               .map((c) => c.text)
               .join("\n");
+            const images = toolResult.content
+              .filter((c): c is ImageContent => c.type === "image")
+              .map((c) => ({ data: c.data, mimeType: c.mimeType }));
             chatMsg.parts[partIdx] = {
               ...part,
               status: toolResult.isError ? "error" : "complete",
               result: resultText,
+              images: images.length > 0 ? images : undefined,
             };
           }
           break;

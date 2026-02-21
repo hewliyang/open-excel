@@ -620,6 +620,228 @@ const xlsxToCsv: CustomCommand = {
     }),
 };
 
+async function decodeImagePixels(
+  data: Uint8Array,
+  targetW: number,
+  targetH: number,
+): Promise<Uint8ClampedArray> {
+  const blob = new Blob([data as BlobPart]);
+  const url = URL.createObjectURL(blob);
+  try {
+    const img = new Image();
+    img.src = url;
+    await img.decode();
+
+    const canvas = new OffscreenCanvas(targetW, targetH);
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("Failed to create canvas 2D context");
+
+    ctx.drawImage(img, 0, 0, targetW, targetH);
+    return ctx.getImageData(0, 0, targetW, targetH).data;
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+function rgbToHex(r: number, g: number, b: number): string {
+  return `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${b.toString(16).padStart(2, "0")}`;
+}
+
+async function paintPixelsToSheet(
+  sheetId: number,
+  startCell: string,
+  width: number,
+  height: number,
+  pixels: Uint8ClampedArray,
+  cellSize: number,
+): Promise<void> {
+  const { col: startCol, row: startRow } = parseStartCell(startCell);
+
+  // RLE: merge adjacent same-color pixels into range spans, grouped by color
+  const colorRanges = new Map<string, string[]>();
+  for (let y = 0; y < height; y++) {
+    const rowNum = startRow + y + 1;
+    let x = 0;
+    while (x < width) {
+      const i = (y * width + x) * 4;
+      const hex = rgbToHex(pixels[i], pixels[i + 1], pixels[i + 2]);
+      const runStart = x;
+      x++;
+      while (x < width) {
+        const j = (y * width + x) * 4;
+        if (
+          pixels[j] !== pixels[i] ||
+          pixels[j + 1] !== pixels[i + 1] ||
+          pixels[j + 2] !== pixels[i + 2]
+        )
+          break;
+        x++;
+      }
+      const rangeAddr =
+        runStart === x - 1
+          ? `${columnIndexToLetter(startCol + runStart)}${rowNum}`
+          : `${columnIndexToLetter(startCol + runStart)}${rowNum}:${columnIndexToLetter(startCol + x - 1)}${rowNum}`;
+      let ranges = colorRanges.get(hex);
+      if (!ranges) {
+        ranges = [];
+        colorRanges.set(hex, ranges);
+      }
+      ranges.push(rangeAddr);
+    }
+  }
+
+  await Excel.run(async (context) => {
+    const sheet = await getWorksheetById(context, sheetId);
+    if (!sheet) throw new Error(`Worksheet with ID ${sheetId} not found`);
+
+    const endCol = columnIndexToLetter(startCol + width - 1);
+    const endRow = startRow + height;
+    const fullRange = sheet.getRange(`${startCell}:${endCol}${endRow}`);
+    fullRange.format.columnWidth = cellSize;
+    fullRange.format.rowHeight = cellSize;
+    const emptyValues: string[][] = Array.from({ length: height }, () =>
+      Array.from({ length: width }, () => ""),
+    );
+    fullRange.values = emptyValues;
+    await context.sync();
+
+    const RANGES_PER_BATCH = 1000;
+    const entries = [...colorRanges.entries()];
+    let queued = 0;
+
+    for (const [color, ranges] of entries) {
+      for (let i = 0; i < ranges.length; i += RANGES_PER_BATCH) {
+        const batch = ranges.slice(i, i + RANGES_PER_BATCH);
+        const areas = sheet.getRanges(batch.join(","));
+        areas.format.fill.color = color;
+        queued += batch.length;
+
+        if (queued >= RANGES_PER_BATCH) {
+          await context.sync();
+          queued = 0;
+        }
+      }
+    }
+
+    await context.sync();
+  });
+}
+
+const imageToSheet: Command = defineCommand(
+  "image-to-sheet",
+  async (args, ctx) => {
+    const positional = args.filter((a) => !a.startsWith("--"));
+    const cellSizeArg = args.find((a) => a.startsWith("--cell-size="));
+    const cellSize = cellSizeArg
+      ? Number.parseFloat(cellSizeArg.split("=")[1])
+      : 6;
+
+    if (positional.length < 4) {
+      return {
+        stdout: "",
+        stderr:
+          "Usage: image-to-sheet <file> <width> <height> <sheetId> [startCell] [--cell-size=N]\n" +
+          "  file       - Path to image file in VFS (png, jpg, gif, webp)\n" +
+          "  width      - Target width in pixels (columns)\n" +
+          "  height     - Target height in pixels (rows)\n" +
+          "  sheetId    - Target worksheet ID\n" +
+          "  startCell  - Top-left cell, default A1\n" +
+          "  --cell-size - Cell width/height in points (default: 6)\n\n" +
+          "Decodes an image, downsamples to target size, and paints it as pixel art\n" +
+          "in Excel by setting cell background colors. Cells are resized to squares.\n" +
+          "Example: image-to-sheet uploads/logo.png 64 64 1 A1 --cell-size=4\n",
+        exitCode: 1,
+      };
+    }
+
+    const [filePath, widthStr, heightStr, sheetIdStr, startCell = "A1"] =
+      positional;
+    const targetW = Number.parseInt(widthStr, 10);
+    const targetH = Number.parseInt(heightStr, 10);
+    const sheetId = Number.parseInt(sheetIdStr, 10);
+
+    if (
+      Number.isNaN(targetW) ||
+      Number.isNaN(targetH) ||
+      targetW < 1 ||
+      targetH < 1
+    ) {
+      return {
+        stdout: "",
+        stderr: "Width and height must be positive integers",
+        exitCode: 1,
+      };
+    }
+
+    if (targetW > 200 || targetH > 200) {
+      return {
+        stdout: "",
+        stderr:
+          "Maximum dimensions: 200×200. Use smaller values for Excel pixel art.",
+        exitCode: 1,
+      };
+    }
+
+    if (Number.isNaN(sheetId)) {
+      return {
+        stdout: "",
+        stderr: `Invalid sheetId: ${sheetIdStr}`,
+        exitCode: 1,
+      };
+    }
+
+    const upperStartCell = startCell.toUpperCase();
+    if (!/^[A-Z]+\d+$/.test(upperStartCell)) {
+      return {
+        stdout: "",
+        stderr: `Invalid start cell: ${startCell}`,
+        exitCode: 1,
+      };
+    }
+
+    if (Number.isNaN(cellSize) || cellSize < 1 || cellSize > 50) {
+      return {
+        stdout: "",
+        stderr: "Cell size must be between 1 and 50 points",
+        exitCode: 1,
+      };
+    }
+
+    try {
+      const { data } = await resolveVfsPath(ctx, filePath);
+      const pixels = await decodeImagePixels(data, targetW, targetH);
+
+      await paintPixelsToSheet(
+        sheetId,
+        upperStartCell,
+        targetW,
+        targetH,
+        pixels,
+        cellSize,
+      );
+
+      const uniqueColors = new Set<string>();
+      for (let i = 0; i < targetW * targetH; i++) {
+        const idx = i * 4;
+        uniqueColors.add(
+          rgbToHex(pixels[idx], pixels[idx + 1], pixels[idx + 2]),
+        );
+      }
+
+      return {
+        stdout:
+          `Painted ${targetW}×${targetH} pixel art (${targetW * targetH} cells, ${uniqueColors.size} colors) ` +
+          `from ${filePath} into sheet ${sheetId} at ${upperStartCell} (cell size: ${cellSize}pt)`,
+        stderr: "",
+        exitCode: 0,
+      };
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      return { stdout: "", stderr: msg, exitCode: 1 };
+    }
+  },
+);
+
 const webSearchCmd: Command = defineCommand("web-search", async (args) => {
   const flags: Record<string, string> = {};
   const positional: string[] = [];
@@ -769,6 +991,7 @@ export function getCustomCommands(): CustomCommand[] {
     pdfToImages,
     docxToText,
     xlsxToCsv,
+    imageToSheet,
     webSearchCmd,
     webFetchCmd,
   ];

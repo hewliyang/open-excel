@@ -10,6 +10,7 @@ export { modifySheetStructureTool } from "./modify-sheet-structure";
 export { modifyWorkbookStructureTool } from "./modify-workbook-structure";
 export { readTool } from "./read-file";
 export { resizeRangeTool } from "./resize-range";
+export { screenshotRangeTool } from "./screenshot-range";
 export { searchDataTool } from "./search-data";
 export { setCellRangeTool } from "./set-cell-range";
 export {
@@ -32,17 +33,19 @@ import { modifySheetStructureTool } from "./modify-sheet-structure";
 import { modifyWorkbookStructureTool } from "./modify-workbook-structure";
 import { readTool } from "./read-file";
 import { resizeRangeTool } from "./resize-range";
+import { screenshotRangeTool } from "./screenshot-range";
 import { searchDataTool } from "./search-data";
 import { setCellRangeTool } from "./set-cell-range";
 
 export const EXCEL_TOOLS = [
-  // File & Bash tools
+  // fs tools
   readTool,
   bashTool,
   // Excel read tools
   getCellRangesTool,
   getRangeAsCsvTool,
   searchDataTool,
+  screenshotRangeTool,
   getAllObjectsTool,
   // Excel write tools
   setCellRangeTool,
