@@ -82,7 +82,7 @@ export const setCellRangeTool = defineTool({
   label: "Set Cell Range",
   description:
     "WRITE. Write values, formulas, and formatting to cells. " +
-    "The cells array must match the range dimensions. " +
+    "The range is auto-expanded to match the cells array dimensions (e.g. A1 with a 1x3 array becomes A1:C1). " +
     "OVERWRITE PROTECTION: By default, fails if target cells contain data. " +
     "If the tool returns an overwrite error, read those cells to see what's there, " +
     "confirm with the user, then retry with allow_overwrite=true. " +
@@ -91,7 +91,7 @@ export const setCellRangeTool = defineTool({
   parameters: Type.Object({
     sheetId: Type.Number({ description: "The worksheet ID (1-based index)" }),
     range: Type.String({
-      description: "Target range in A1 notation, must match cells dimensions",
+      description: "Target range in A1 notation (auto-expands to match cells dimensions)",
     }),
     cells: Type.Array(Type.Array(CellSchema), {
       description: "2D array of cell data matching range dimensions",

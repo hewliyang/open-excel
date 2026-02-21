@@ -563,6 +563,7 @@ export interface SetCellRangeResult {
   success: boolean;
   cellsWritten: number;
   formulaResults?: Record<string, unknown>;
+  messages?: string[];
 }
 
 export async function setCellRange(
@@ -582,9 +583,25 @@ export async function setCellRange(
     const sheet = await getWorksheetById(context, sheetId);
     if (!sheet) throw new Error(`Worksheet with ID ${sheetId} not found`);
 
-    const range = sheet.getRange(rangeAddr);
+    const messages: string[] = [];
+    let range = sheet.getRange(rangeAddr);
     range.load("rowCount,columnCount,values,formulas,address");
     await context.sync();
+
+    const inputRows = cells.length;
+    const inputCols = Math.max(...cells.map((r) => r.length));
+    if (inputRows !== range.rowCount || inputCols !== range.columnCount) {
+      const { startCol, startRow } = parseRangeAddress(range.address);
+      const endRow = startRow + inputRows - 1;
+      const endCol = startCol + inputCols - 1;
+      const newAddr = `${cellAddress(startRow, startCol)}:${cellAddress(endRow, endCol)}`;
+      messages.push(
+        `Adjusted range from ${rangeAddr} to ${newAddr} (row diff: ${inputRows - range.rowCount}, col diff: ${inputCols - range.columnCount})`,
+      );
+      range = sheet.getRange(newAddr);
+      range.load("rowCount,columnCount,values,formulas,address");
+      await context.sync();
+    }
 
     if (!allowOverwrite) {
       const nonEmptyCells: string[] = [];
@@ -771,6 +788,7 @@ export async function setCellRange(
       success: true,
       cellsWritten: cells.flat().length,
       ...(Object.keys(formulaResults).length > 0 && { formulaResults }),
+      ...(messages.length > 0 && { messages }),
     };
   });
 }
