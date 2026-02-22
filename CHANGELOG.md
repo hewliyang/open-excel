@@ -2,6 +2,21 @@
 
 ## [Unreleased]
 
+## [0.2.4] - 2026-02-22
+
+### Features
+
+- **Screenshot tool** — New `screenshot_range` tool captures Excel cell ranges as images and stores them in the VFS. New `pixart` CLI command renders pixel art from a simple text DSL directly into Excel cells.
+- **Flexible set_cell_range** — `set_cell_range` now auto-pads rows with empty strings when row lengths don't match, removing the strict rectangular shape requirement.
+
+### Fixes
+
+- **Manifest validation** — Fixed invalid dev manifest GUID that prevented sideloading in Excel. Added manifest validation to `pnpm check` and CI.
+
+### Chores
+
+- Bumped `@mariozechner/pi-ai` and `@mariozechner/pi-agent-core` dependencies.
+
 ## [0.2.3] - 2026-02-15
 
 ### Features
