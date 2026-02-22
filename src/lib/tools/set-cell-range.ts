@@ -91,7 +91,8 @@ export const setCellRangeTool = defineTool({
   parameters: Type.Object({
     sheetId: Type.Number({ description: "The worksheet ID (1-based index)" }),
     range: Type.String({
-      description: "Target range in A1 notation (auto-expands to match cells dimensions)",
+      description:
+        "Target range in A1 notation (auto-expands to match cells dimensions)",
     }),
     cells: Type.Array(Type.Array(CellSchema), {
       description: "2D array of cell data matching range dimensions",

@@ -30,8 +30,8 @@
     "watch": "vite build --mode development --watch"
   },
   "dependencies": {
-    "@mariozechner/pi-agent-core": "^0.52.6",
-    "@mariozechner/pi-ai": "^0.52.6",
+    "@mariozechner/pi-agent-core": "^0.54.0",
+    "@mariozechner/pi-ai": "^0.54.0",
     "@mozilla/readability": "^0.6.0",
     "@sinclair/typebox": "^0.34.48",
     "@streamdown/code": "^1.0.1",

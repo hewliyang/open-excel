@@ -1,10 +1,10 @@
 /* global Excel */
 
 import { Type } from "@sinclair/typebox";
-import { getWorksheetById } from "../excel/api";
 import { parseRange } from "../dirty-tracker";
-import { defineTool, toolError } from "./types";
+import { getWorksheetById } from "../excel/api";
 import type { ToolResult } from "./types";
+import { defineTool, toolError } from "./types";
 
 const HEADER_WIDTH = 40;
 const HEADER_HEIGHT = 20;
@@ -72,7 +72,11 @@ function compositeWithHeaders(
         ctx.lineTo(x, HEADER_HEIGHT);
         ctx.stroke();
         ctx.fillStyle = HEADER_TEXT_COLOR;
-        ctx.fillText(columnIndexToLetter(startCol + i), x + w / 2, HEADER_HEIGHT / 2);
+        ctx.fillText(
+          columnIndexToLetter(startCol + i),
+          x + w / 2,
+          HEADER_HEIGHT / 2,
+        );
         x += w;
       }
 

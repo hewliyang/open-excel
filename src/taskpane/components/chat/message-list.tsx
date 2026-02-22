@@ -233,7 +233,7 @@ function ToolCallBlock({ part }: { part: ToolCallPart }) {
                 <img
                   key={`${part.id}-img-${imgIdx}`}
                   src={`data:${img.mimeType};base64,${img.data}`}
-                  alt={`Tool result image ${imgIdx + 1}`}
+                  alt={`Tool result ${imgIdx + 1}`}
                   className="max-w-full rounded-sm border border-(--chat-border)"
                 />
               ))}
