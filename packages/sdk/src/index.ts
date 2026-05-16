@@ -83,6 +83,7 @@ export {
 } from "./storage";
 // Tools
 export { createBashTool } from "./tools/bash";
+export { createEditFileTool } from "./tools/edit-file";
 export { createReadTool } from "./tools/read-file";
 export {
   defineTool,

@@ -13,6 +13,7 @@ export {
   type ChatMessage,
   type ChatSession,
   createBashTool,
+  createEditFileTool,
   createReadTool,
   createSession,
   DEFAULT_MAX_BYTES,

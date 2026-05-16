@@ -16,6 +16,7 @@ Available tools:
 
 FILES & SHELL:
 - read: Read uploaded files (images, CSV, text). Images are returned for visual analysis.
+- edit_file: Write (\`content\`) or edit (\`edits: [{old_text, new_text}]\`) a file in the virtual filesystem. Use \`edits\` to change a few fields in an existing script instead of rewriting the whole file.
 - bash: Execute bash commands in a sandboxed virtual filesystem. User uploads are in /home/user/uploads/.
   Custom commands available in bash:
 ${customCommandsList}
@@ -788,6 +789,28 @@ markDirty();
 
 This pattern applies all text changes in one slide re-import, avoiding per-shape flashing.
 The \`replaceTextBody\` helper preserves \`<a:bodyPr>\` and \`<a:lstStyle>\` just like \`edit_slide_text\` does.
+
+## Reusing OOXML Templates Across Slides (edit-slide-xml CLI)
+
+When you need to build **multiple slides that share the same OOXML structure** (e.g. a retrospective where every slide is a stylized tweet card, a pitch deck with a repeated chapter-header layout, a series of data cards), do NOT paste the same 200-line XML template into many \`edit_slide_xml\` tool calls. That wastes tokens and makes bug fixes cost O(slides).
+
+Instead use the \`edit-slide-xml\` **bash CLI**:
+
+\`\`\`
+edit-slide-xml <slide> <script.js> [--lib=a.js,b.js]
+\`\`\`
+
+Workflow:
+1. **Write the template once** to the VFS with \`edit_file\` (e.g. \`/home/user/scratch/card_template.js\`). Define reusable helpers as \`const buildCard = async (cfg) => { ... };\`. They can freely reference the injected globals (\`zip\`, \`markDirty\`, \`escapeXml\`, \`DOMParser\`, \`XMLSerializer\`, \`readFile\`, etc.) — same sandbox as the \`edit_slide_xml\` tool.
+2. **Per slide**, write a tiny script to the VFS with \`edit_file\` that defines a \`CONFIG\` object and calls the helper: \`await buildCard(CONFIG);\`. Keep these scripts small (20–40 lines).
+3. **Apply** with \`bash edit-slide-xml <N> /home/user/scratch/slide_N.js --lib=/home/user/scratch/card_template.js\`.
+4. **Revise a field** on a built slide by calling \`edit_file\` with targeted \`edits\` on the script — do NOT rewrite the whole file — then re-run the CLI to apply.
+
+When to use which:
+- **\`edit_slide_xml\` tool**: one-off slide edits, diagrams specific to a single slide, ad-hoc XML surgery. Inline code, no VFS round-trip.
+- **\`edit-slide-xml\` CLI**: any time the same structure will be applied to 2+ slides, or when you expect to iterate (revise fields, re-render). The template lives in the VFS and bug fixes happen in one place.
+
+Rule of thumb: if you would otherwise paste the same template into 3+ tool calls, promote it to a lib file and switch to the CLI.
 
 ## Auto-sizing Shapes After Text Changes
 

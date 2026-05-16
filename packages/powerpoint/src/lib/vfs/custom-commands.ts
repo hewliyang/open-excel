@@ -3,9 +3,11 @@ import {
   type DescribedCommand,
   getSharedCustomCommands,
   type StorageNamespace,
+  sandboxedEval,
 } from "@office-agents/core";
 import { defineCommand } from "just-bash/browser";
 import { safeRun, withSlideZip } from "../pptx/slide-zip";
+import { escapeXml } from "../pptx/xml-utils";
 
 async function resolveVfsPath(
   ctx: { cwd: string; fs: { readFileBuffer(p: string): Promise<Uint8Array> } },
@@ -783,11 +785,159 @@ const insertIconCmd: DescribedCommand = {
   },
 };
 
+const editSlideXmlCmd: DescribedCommand = {
+  promptSnippet:
+    "- edit-slide-xml <slide> <script.js> [--lib=a.js,b.js] — Run a JS script from the VFS against a slide's OOXML (1-based slide). Script body runs in the same sandbox as the edit_slide_xml tool with globals: zip, markDirty, escapeXml, readFile, readFileBuffer, writeFile, DOMParser, XMLSerializer. Use --lib to prepend one or more helper files (comma-separated). Put reusable template code in a lib file and keep each per-slide script short.",
+  command: {
+    name: "edit-slide-xml",
+    load: async () =>
+      defineCommand("edit-slide-xml", async (args, ctx) => {
+        const flags: Record<string, string> = {};
+        const positional: string[] = [];
+        for (const arg of args) {
+          const match = arg.match(/^--(\w+)=(.+)$/);
+          if (match) {
+            flags[match[1]] = match[2];
+          } else {
+            positional.push(arg);
+          }
+        }
+
+        if (positional.length < 2) {
+          return {
+            stdout: "",
+            stderr:
+              "Usage: edit-slide-xml <slide> <script.js> [--lib=a.js,b.js]\n" +
+              "  slide      - 1-based slide number\n" +
+              "  script.js  - Path to script file in VFS (absolute or relative to cwd)\n" +
+              "  --lib      - Comma-separated helper files prepended to the script\n" +
+              "\n" +
+              "The script runs as the body of an async function in the same sandbox as\n" +
+              "the edit_slide_xml tool. Available globals:\n" +
+              "  zip, markDirty, escapeXml, readFile, readFileBuffer, writeFile,\n" +
+              "  DOMParser, XMLSerializer, console, Math, Date\n" +
+              "\n" +
+              "Libs are concatenated before the script. Helpers defined as `const fn = ...`\n" +
+              "in a lib can be called from the script.\n",
+            exitCode: 1,
+          };
+        }
+
+        const [slideArg, scriptPath] = positional;
+        const slideNum = Number.parseInt(slideArg, 10);
+        if (Number.isNaN(slideNum) || slideNum < 1) {
+          return {
+            stdout: "",
+            stderr: "Slide must be a positive number (1-based)",
+            exitCode: 1,
+          };
+        }
+        const slideIndex = slideNum - 1;
+
+        const cwd = ctx.cwd;
+        const resolveVfs = (p: string): string =>
+          p.startsWith("/") ? p : `${cwd}/${p}`;
+
+        const decoder = new TextDecoder();
+        async function readText(p: string): Promise<string> {
+          const buf = await ctx.fs.readFileBuffer(resolveVfs(p));
+          return decoder.decode(buf);
+        }
+
+        let scriptSource: string;
+        try {
+          scriptSource = await readText(scriptPath);
+        } catch (error) {
+          const msg = error instanceof Error ? error.message : String(error);
+          return {
+            stdout: "",
+            stderr: `Failed to read script ${scriptPath}: ${msg}`,
+            exitCode: 1,
+          };
+        }
+
+        const libPaths = flags.lib
+          ? flags.lib
+              .split(",")
+              .map((p) => p.trim())
+              .filter(Boolean)
+          : [];
+        const libSources: string[] = [];
+        for (const libPath of libPaths) {
+          try {
+            const src = await readText(libPath);
+            libSources.push(`// --- lib: ${libPath} ---\n${src}`);
+          } catch (error) {
+            const msg = error instanceof Error ? error.message : String(error);
+            return {
+              stdout: "",
+              stderr: `Failed to read lib ${libPath}: ${msg}`,
+              exitCode: 1,
+            };
+          }
+        }
+
+        const combined =
+          libSources.length > 0
+            ? `${libSources.join("\n\n")}\n\n// --- script: ${scriptPath} ---\n${scriptSource}`
+            : scriptSource;
+
+        try {
+          const result = await safeRun(async (context) => {
+            return withSlideZip(context, slideIndex, async (args) => {
+              return sandboxedEval(combined, {
+                ...args,
+                escapeXml,
+                readFile: (p: string) => readText(p),
+                readFileBuffer: (p: string) =>
+                  ctx.fs.readFileBuffer(resolveVfs(p)),
+                writeFile: async (p: string, content: string | Uint8Array) => {
+                  const full = resolveVfs(p);
+                  const dir = full.substring(0, full.lastIndexOf("/"));
+                  if (dir && dir !== "/") {
+                    try {
+                      await ctx.fs.mkdir(dir, { recursive: true });
+                    } catch {
+                      // exists
+                    }
+                  }
+                  await ctx.fs.writeFile(full, content);
+                },
+                DOMParser,
+                XMLSerializer,
+              });
+            });
+          });
+
+          const libSummary =
+            libPaths.length > 0 ? ` (libs: ${libPaths.join(", ")})` : "";
+          const resultSummary =
+            result === undefined || result === null
+              ? ""
+              : ` → ${JSON.stringify(result).slice(0, 200)}`;
+          return {
+            stdout: `Applied ${scriptPath} to slide ${slideNum}${libSummary}${resultSummary}`,
+            stderr: "",
+            exitCode: 0,
+          };
+        } catch (error) {
+          const msg = error instanceof Error ? error.message : String(error);
+          return {
+            stdout: "",
+            stderr: `edit-slide-xml failed: ${msg}`,
+            exitCode: 1,
+          };
+        }
+      }),
+  },
+};
+
 export function getCustomCommands(ns: StorageNamespace): CustomCommandsResult {
   const local: DescribedCommand[] = [
     insertImageCmd,
     searchIconsCmd,
     insertIconCmd,
+    editSlideXmlCmd,
   ];
   const shared = getSharedCustomCommands({
     ns,
