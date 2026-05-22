@@ -1,5 +1,10 @@
 import { Type } from "@sinclair/typebox";
-import { setCellRange } from "../excel/api";
+import { setCellRange, getWorksheetById } from "../excel/api";
+import {
+  captureCellRangeState,
+  restoreCellRangeState,
+  undoManager,
+} from "../undo";
 import { defineTool, toolError, toolSuccess } from "./types";
 
 const BorderStyleSchema = Type.Optional(
@@ -125,6 +130,7 @@ export const setCellRangeTool = defineTool({
   },
   execute: async (_toolCallId, params) => {
     try {
+      // Execute the operation first
       const result = await setCellRange(
         params.sheetId,
         params.range,
@@ -136,11 +142,63 @@ export const setCellRangeTool = defineTool({
           allowOverwrite: params.allow_overwrite,
         },
       );
+
+      // Try to capture state for undo (best effort - don't fail if this doesn't work)
+      try {
+        await Excel.run(async (context) => {
+          const sheet = await getWorksheetById(context, params.sheetId);
+          if (!sheet) {
+            console.log("[set_cell_range] Sheet not found for undo, skipping");
+            return;
+          }
+
+          sheet.load("name");
+          await context.sync();
+          const sheetName = sheet.name;
+
+          // Try to capture current state for potential undo
+          try {
+            const currentState = await captureCellRangeState(sheetName, params.range);
+
+            // Register undo operation
+            undoManager.registerOperation(
+              `Set cells in ${sheetName}!${params.range}`,
+              async () => {
+                await restoreCellRangeState(sheetName, currentState);
+              }
+            );
+          } catch (stateErr) {
+            console.log("[set_cell_range] Could not capture state for undo:", stateErr);
+          }
+        });
+      } catch (undoErr) {
+        // Undo registration failed - that's ok, the write still succeeded
+        console.log("[set_cell_range] Could not register undo:", undoErr);
+      }
+
       return toolSuccess(result);
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Unknown error writing cells";
-      return toolError(message);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+
+      // Detect permission/protection errors
+      if (
+        errorMessage.includes("protected") ||
+        errorMessage.includes("permission") ||
+        errorMessage.includes("read-only") ||
+        errorMessage.includes("restricted")
+      ) {
+        return toolError(
+          `❌ **Write blocked - Workbook is protected**\n\n` +
+          `Cannot write to cells because Excel is blocking modifications.\n\n` +
+          `**Solution:** Provide copy-paste ready formulas instead:\n` +
+          `1. Use check_write_permissions tool to diagnose\n` +
+          `2. Show the user the exact formulas to paste\n` +
+          `3. Guide them to paste manually in the target range\n\n` +
+          `Error: ${errorMessage}`
+        );
+      }
+
+      return toolError(`Failed to write cells: ${errorMessage}`);
     }
   },
 });

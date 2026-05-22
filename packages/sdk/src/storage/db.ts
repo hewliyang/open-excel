@@ -47,34 +47,56 @@ interface OfficeAgentsSchema extends DBSchema {
 
 let dbPromise: Promise<IDBPDatabase<OfficeAgentsSchema>> | null = null;
 let dbKey: string | null = null;
+let useMemoryFallback = false;
 
-function getDb(
+// NOTE: In-memory fallback for when IndexedDB is blocked (e.g., PowerPoint Online)
+const memoryStore: {
+  sessions: Map<string, ChatSession>;
+  vfsFiles: Map<string, VfsFile>;
+  skillFiles: Map<string, SkillFile>;
+} = {
+  sessions: new Map(),
+  vfsFiles: new Map(),
+  skillFiles: new Map(),
+};
+
+async function getDb(
   ns: StorageNamespace,
-): Promise<IDBPDatabase<OfficeAgentsSchema>> {
+): Promise<IDBPDatabase<OfficeAgentsSchema> | null> {
+  if (useMemoryFallback) return null;
+
   const key = `${ns.dbName}@${ns.dbVersion}`;
   if (dbPromise && dbKey === key) return dbPromise;
 
   dbKey = key;
-  dbPromise = openDB<OfficeAgentsSchema>(ns.dbName, ns.dbVersion, {
-    upgrade(db) {
-      if (!db.objectStoreNames.contains("sessions")) {
-        const sessions = db.createObjectStore("sessions", { keyPath: "id" });
-        sessions.createIndex("workbookId", "workbookId");
-        sessions.createIndex("updatedAt", "updatedAt");
-      }
-      if (!db.objectStoreNames.contains("vfsFiles")) {
-        const vfsFiles = db.createObjectStore("vfsFiles", { keyPath: "id" });
-        vfsFiles.createIndex("sessionId", "sessionId");
-      }
-      if (!db.objectStoreNames.contains("skillFiles")) {
-        const skillFiles = db.createObjectStore("skillFiles", {
-          keyPath: "id",
-        });
-        skillFiles.createIndex("skillName", "skillName");
-      }
-    },
-  });
-  return dbPromise;
+  try {
+    dbPromise = openDB<OfficeAgentsSchema>(ns.dbName, ns.dbVersion, {
+      upgrade(db) {
+        if (!db.objectStoreNames.contains("sessions")) {
+          const sessions = db.createObjectStore("sessions", { keyPath: "id" });
+          sessions.createIndex("workbookId", "workbookId");
+          sessions.createIndex("updatedAt", "updatedAt");
+        }
+        if (!db.objectStoreNames.contains("vfsFiles")) {
+          const vfsFiles = db.createObjectStore("vfsFiles", { keyPath: "id" });
+          vfsFiles.createIndex("sessionId", "sessionId");
+        }
+        if (!db.objectStoreNames.contains("skillFiles")) {
+          const skillFiles = db.createObjectStore("skillFiles", {
+            keyPath: "id",
+          });
+          skillFiles.createIndex("skillName", "skillName");
+        }
+      },
+    });
+    return await dbPromise;
+  } catch (error) {
+    // NOTE: IndexedDB blocked (PowerPoint Online with tracking protection)
+    console.warn("[DB] IndexedDB unavailable, using in-memory fallback:", error);
+    useMemoryFallback = true;
+    dbPromise = null;
+    return null;
+  }
 }
 
 function extractUserText(msg: AgentMessage): string | null {
@@ -130,6 +152,18 @@ export async function listSessions(
   workbookId: string,
 ): Promise<ChatSession[]> {
   const db = await getDb(ns);
+
+  // NOTE: Memory fallback
+  if (!db) {
+    const sessions = [...memoryStore.sessions.values()]
+      .filter(s => s.workbookId === workbookId);
+    for (const s of sessions) {
+      if (!s.agentMessages) s.agentMessages = [];
+    }
+    sessions.sort((a, b) => b.updatedAt - a.updatedAt);
+    return sessions;
+  }
+
   const sessions = await db.getAllFromIndex(
     "sessions",
     "workbookId",
@@ -157,6 +191,13 @@ export async function createSession(
     createdAt: now,
     updatedAt: now,
   };
+
+  // NOTE: Memory fallback
+  if (!db) {
+    memoryStore.sessions.set(session.id, session);
+    return session;
+  }
+
   await db.add("sessions", session);
   return session;
 }
@@ -166,6 +207,16 @@ export async function getSession(
   sessionId: string,
 ): Promise<ChatSession | undefined> {
   const db = await getDb(ns);
+
+  // NOTE: Memory fallback
+  if (!db) {
+    const session = memoryStore.sessions.get(sessionId);
+    if (session && !session.agentMessages) {
+      session.agentMessages = [];
+    }
+    return session;
+  }
+
   const session = await db.get("sessions", sessionId);
   if (session && !session.agentMessages) {
     session.agentMessages = [];
@@ -185,6 +236,29 @@ export async function saveSession(
     agentMessages.length,
   );
   const db = await getDb(ns);
+
+  // NOTE: Memory fallback
+  if (!db) {
+    const session = memoryStore.sessions.get(sessionId);
+    if (!session) {
+      console.error("[DB] Session not found for save:", sessionId);
+      return;
+    }
+    let name = session.name;
+    if (name === "New Chat") {
+      const derivedName = deriveSessionName(agentMessages);
+      if (derivedName) name = derivedName;
+    }
+    memoryStore.sessions.set(sessionId, {
+      ...session,
+      agentMessages,
+      name,
+      updatedAt: Date.now(),
+    });
+    console.log("[DB] saveSession complete (memory)");
+    return;
+  }
+
   const session = await db.get("sessions", sessionId);
   if (!session) {
     console.error("[DB] Session not found for save:", sessionId);
@@ -210,6 +284,16 @@ export async function renameSession(
   name: string,
 ): Promise<void> {
   const db = await getDb(ns);
+
+  // NOTE: Memory fallback
+  if (!db) {
+    const session = memoryStore.sessions.get(sessionId);
+    if (session) {
+      memoryStore.sessions.set(sessionId, { ...session, name });
+    }
+    return;
+  }
+
   const session = await db.get("sessions", sessionId);
   if (session) {
     await db.put("sessions", { ...session, name });
@@ -221,6 +305,13 @@ export async function deleteSession(
   sessionId: string,
 ): Promise<void> {
   const db = await getDb(ns);
+
+  // NOTE: Memory fallback
+  if (!db) {
+    memoryStore.sessions.delete(sessionId);
+    return;
+  }
+
   await db.delete("sessions", sessionId);
 }
 
@@ -244,6 +335,28 @@ export async function saveVfsFiles(
 ): Promise<void> {
   console.log("[DB] saveVfsFiles:", sessionId, "files:", files.length);
   const db = await getDb(ns);
+
+  // NOTE: Memory fallback
+  if (!db) {
+    // Delete existing files for this session
+    for (const [key, file] of memoryStore.vfsFiles) {
+      if (file.sessionId === sessionId) {
+        memoryStore.vfsFiles.delete(key);
+      }
+    }
+    // Add new files
+    for (const f of files) {
+      const id = `${sessionId}:${f.path}`;
+      memoryStore.vfsFiles.set(id, {
+        id,
+        sessionId,
+        path: f.path,
+        data: f.data,
+      });
+    }
+    return;
+  }
+
   const tx = db.transaction("vfsFiles", "readwrite");
   const store = tx.store;
   const existing = await store.index("sessionId").getAllKeys(sessionId);
@@ -266,6 +379,15 @@ export async function loadVfsFiles(
   sessionId: string,
 ): Promise<{ path: string; data: Uint8Array }[]> {
   const db = await getDb(ns);
+
+  // NOTE: Memory fallback
+  if (!db) {
+    const rows = [...memoryStore.vfsFiles.values()]
+      .filter(f => f.sessionId === sessionId);
+    console.log("[DB] loadVfsFiles (memory):", sessionId, "files:", rows.length);
+    return rows.map((r) => ({ path: r.path, data: r.data }));
+  }
+
   const rows = await db.getAllFromIndex("vfsFiles", "sessionId", sessionId);
   console.log("[DB] loadVfsFiles:", sessionId, "files:", rows.length);
   return rows.map((r) => ({ path: r.path, data: r.data }));
@@ -276,6 +398,17 @@ export async function deleteVfsFiles(
   sessionId: string,
 ): Promise<void> {
   const db = await getDb(ns);
+
+  // NOTE: Memory fallback
+  if (!db) {
+    for (const [key, file] of memoryStore.vfsFiles) {
+      if (file.sessionId === sessionId) {
+        memoryStore.vfsFiles.delete(key);
+      }
+    }
+    return;
+  }
+
   const tx = db.transaction("vfsFiles", "readwrite");
   const keys = await tx.store.index("sessionId").getAllKeys(sessionId);
   for (const key of keys) {
@@ -290,6 +423,26 @@ export async function saveSkillFiles(
   files: { path: string; data: Uint8Array }[],
 ): Promise<void> {
   const db = await getDb(ns);
+
+  // NOTE: Memory fallback
+  if (!db) {
+    for (const [key, file] of memoryStore.skillFiles) {
+      if (file.skillName === skillName) {
+        memoryStore.skillFiles.delete(key);
+      }
+    }
+    for (const f of files) {
+      const id = `${skillName}:${f.path}`;
+      memoryStore.skillFiles.set(id, {
+        id,
+        skillName,
+        path: f.path,
+        data: f.data,
+      });
+    }
+    return;
+  }
+
   const tx = db.transaction("skillFiles", "readwrite");
   const store = tx.store;
   const existing = await store.index("skillName").getAllKeys(skillName);
@@ -312,6 +465,14 @@ export async function loadSkillFiles(
   skillName: string,
 ): Promise<{ path: string; data: Uint8Array }[]> {
   const db = await getDb(ns);
+
+  // NOTE: Memory fallback
+  if (!db) {
+    const rows = [...memoryStore.skillFiles.values()]
+      .filter(f => f.skillName === skillName);
+    return rows.map((r) => ({ path: r.path, data: r.data }));
+  }
+
   const rows = await db.getAllFromIndex("skillFiles", "skillName", skillName);
   return rows.map((r) => ({ path: r.path, data: r.data }));
 }
@@ -320,6 +481,17 @@ export async function loadAllSkillFiles(
   ns: StorageNamespace,
 ): Promise<{ skillName: string; path: string; data: Uint8Array }[]> {
   const db = await getDb(ns);
+
+  // NOTE: Memory fallback
+  if (!db) {
+    const rows = [...memoryStore.skillFiles.values()];
+    return rows.map((r) => ({
+      skillName: r.skillName,
+      path: r.path,
+      data: r.data,
+    }));
+  }
+
   const rows = await db.getAll("skillFiles");
   return rows.map((r) => ({
     skillName: r.skillName,
@@ -333,6 +505,17 @@ export async function deleteSkillFiles(
   skillName: string,
 ): Promise<void> {
   const db = await getDb(ns);
+
+  // NOTE: Memory fallback
+  if (!db) {
+    for (const [key, file] of memoryStore.skillFiles) {
+      if (file.skillName === skillName) {
+        memoryStore.skillFiles.delete(key);
+      }
+    }
+    return;
+  }
+
   const tx = db.transaction("skillFiles", "readwrite");
   const keys = await tx.store.index("skillName").getAllKeys(skillName);
   for (const key of keys) {
@@ -343,6 +526,13 @@ export async function deleteSkillFiles(
 
 export async function listSkillNames(ns: StorageNamespace): Promise<string[]> {
   const db = await getDb(ns);
+
+  // NOTE: Memory fallback
+  if (!db) {
+    const names = new Set([...memoryStore.skillFiles.values()].map((r) => r.skillName));
+    return [...names].sort();
+  }
+
   const rows = await db.getAll("skillFiles");
   const names = new Set(rows.map((r) => r.skillName));
   return [...names].sort();
