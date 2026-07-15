@@ -55,6 +55,10 @@ export class ChatController {
     this.#runtime.setProviderConfig(config);
   }
 
+  reloadMcpTools() {
+    return this.#runtime.reloadMcpTools();
+  }
+
   clearMessages() {
     this.#runtime.clearMessages();
   }

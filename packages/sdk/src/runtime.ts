@@ -22,6 +22,7 @@ import {
   generateId,
   type SessionStats,
 } from "./message-utils";
+import { loadMcpTools } from "./mcp";
 import {
   loadOAuthCredentials,
   refreshOAuthToken,
@@ -120,10 +121,14 @@ export class AgentRuntime {
     return this.context.namespace;
   }
 
+  private mcpTools: AgentTool[] = [];
+
   private get tools(): AgentTool[] {
-    return typeof this.adapter.tools === "function"
-      ? this.adapter.tools(this.context)
-      : this.adapter.tools;
+    const base =
+      typeof this.adapter.tools === "function"
+        ? this.adapter.tools(this.context)
+        : this.adapter.tools;
+    return [...base, ...this.mcpTools];
   }
 
   constructor(adapter: RuntimeAdapter, context: AgentContext) {
@@ -700,6 +705,20 @@ export class AgentRuntime {
     }
   }
 
+  // Reconnect to configured MCP servers and rebuild the agent so the refreshed
+  // tool list takes effect without a full page reload.
+  async reloadMcpTools(): Promise<number> {
+    try {
+      this.mcpTools = await loadMcpTools(this.ns);
+    } catch {
+      this.mcpTools = [];
+    }
+    if (this.config) {
+      this.applyConfig(this.config);
+    }
+    return this.mcpTools.length;
+  }
+
   async init() {
     if (this.sessionLoaded) return;
     this.sessionLoaded = true;
@@ -720,6 +739,14 @@ export class AgentRuntime {
       const skills = await getInstalledSkills(this.ns);
       this.skills = skills;
       await syncSkillsToVfs(this.ns, this.context);
+
+      // Load MCP tools before applyConfig so they are included when the agent
+      // is built. A failure here must never block startup.
+      try {
+        this.mcpTools = await loadMcpTools(this.ns);
+      } catch {
+        this.mcpTools = [];
+      }
 
       const saved = loadSavedConfig(this.ns);
       if (saved?.provider && saved?.apiKey && saved?.model) {

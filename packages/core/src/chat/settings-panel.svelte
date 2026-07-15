@@ -7,10 +7,13 @@
     listFetchProviders,
     listImageSearchProviders,
     listSearchProviders,
+    loadMcpConfig,
     loadOAuthCredentials,
     loadSavedConfig,
     loadWebConfig,
+    type McpServerConfig,
     OAUTH_PROVIDERS,
+    saveMcpConfig,
     removeOAuthCredentials,
     saveConfig,
     saveOAuthCredentials,
@@ -62,6 +65,40 @@
   let serperApiKey = $state(savedWeb.apiKeys.serper || "");
   let exaApiKey = $state(savedWeb.apiKeys.exa || "");
   let showAdvancedWebKeys = $state(false);
+
+  let mcpServers = $state<McpServerConfig[]>(loadMcpConfig(ns).servers ?? []);
+  let mcpStatus = $state("");
+  let mcpBusy = $state(false);
+
+  function addMcpServer() {
+    mcpServers.push({ name: "", url: "", enabled: true });
+  }
+
+  function removeMcpServer(index: number) {
+    mcpServers.splice(index, 1);
+  }
+
+  async function saveMcp() {
+    mcpBusy = true;
+    mcpStatus = "";
+    try {
+      const servers = mcpServers
+        .filter((s) => s.name.trim() && s.url.trim())
+        .map((s) => ({
+          name: s.name.trim(),
+          url: s.url.trim(),
+          enabled: s.enabled !== false,
+        }));
+      saveMcpConfig(ns, { servers });
+      const count = await chat.reloadMcpTools();
+      const active = servers.filter((s) => s.enabled).length;
+      mcpStatus = `Loaded ${count} tool${count === 1 ? "" : "s"} from ${active} server${active === 1 ? "" : "s"}.`;
+    } catch (error) {
+      mcpStatus = `Error: ${error instanceof Error ? error.message : String(error)}`;
+    } finally {
+      mcpBusy = false;
+    }
+  }
 
   let oauthFlow = $state<OAuthFlowState>(
     saved?.authMethod === "oauth"
@@ -880,6 +917,87 @@
       class="hidden"
       onchange={handleFileSelect}
     />
+  </div>
+
+  <div class="border-t border-(--chat-border) pt-4">
+    <div class="text-[10px] uppercase tracking-widest text-(--chat-text-muted) mb-4">
+      mcp servers
+    </div>
+
+    <div class="space-y-3">
+      {#if mcpServers.length > 0}
+        <div class="space-y-2">
+          {#each mcpServers as server, i (i)}
+            <div
+              class="space-y-2 px-3 py-2 bg-(--chat-input-bg) border border-(--chat-border)"
+              style="border-radius: var(--chat-radius)"
+            >
+              <div class="flex items-center gap-2">
+                <input
+                  type="text"
+                  bind:value={server.name}
+                  placeholder="name (e.g. mssql-mate)"
+                  class="flex-1 min-w-0 bg-(--chat-bg) text-(--chat-text-primary) text-xs px-2 py-1.5 border border-(--chat-border) focus:outline-none focus:border-(--chat-border-active)"
+                />
+                <label
+                  class="flex items-center gap-1 text-[10px] text-(--chat-text-muted) shrink-0"
+                >
+                  <input type="checkbox" bind:checked={server.enabled} />
+                  on
+                </label>
+                <button
+                  type="button"
+                  onclick={() => removeMcpServer(i)}
+                  class="shrink-0 p-1 text-(--chat-text-muted) hover:text-(--chat-error) transition-colors"
+                  title="Remove server"
+                >
+                  <Trash2 size={12} />
+                </button>
+              </div>
+              <input
+                type="text"
+                bind:value={server.url}
+                placeholder="http://localhost:11501/mcp"
+                class="w-full bg-(--chat-bg) text-(--chat-text-primary) text-xs px-2 py-1.5 border border-(--chat-border) focus:outline-none focus:border-(--chat-border-active)"
+              />
+            </div>
+          {/each}
+        </div>
+      {:else}
+        <p class="text-xs text-(--chat-text-muted)">No MCP servers configured</p>
+      {/if}
+
+      <div class="flex gap-2">
+        <button
+          type="button"
+          onclick={addMcpServer}
+          class="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-xs bg-(--chat-input-bg) border border-(--chat-border) text-(--chat-text-secondary) hover:border-(--chat-border-active) hover:text-(--chat-text-primary) transition-colors"
+          style="border-radius: var(--chat-radius)"
+        >
+          <Plus size={12} />
+          Add Server
+        </button>
+        <button
+          type="button"
+          onclick={saveMcp}
+          disabled={mcpBusy}
+          class="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-xs bg-(--chat-input-bg) border border-(--chat-border) text-(--chat-text-secondary) hover:border-(--chat-border-active) hover:text-(--chat-text-primary) disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          style="border-radius: var(--chat-radius)"
+        >
+          <Check size={12} />
+          {mcpBusy ? "Loading…" : "Save & Reload"}
+        </button>
+      </div>
+
+      {#if mcpStatus}
+        <p class="text-[10px] text-(--chat-text-secondary)">{mcpStatus}</p>
+      {/if}
+      <p class="text-[10px] text-(--chat-text-muted)">
+        Tools from each enabled MCP server are added to the agent. For an http://
+        server, point the URL at a localhost proxy (browsers block http from an
+        https page except on localhost).
+      </p>
+    </div>
   </div>
 
   <div class="border-t border-(--chat-border) pt-4">
